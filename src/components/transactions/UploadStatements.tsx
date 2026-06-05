@@ -13,6 +13,7 @@ import { parseByBank, detectBank, getParserInfo } from '../../parsers/banks';
 import { categorizeTransactions } from '../../utils/categorization';
 import { Account, Category, Transaction } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import BankLogo from '../common/BankLogo';
 
 export const UploadStatements = () => {
   const { user } = useAuth();
@@ -399,16 +400,8 @@ export const UploadStatements = () => {
                         : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
                     }`}
                   >
-                    <div className="text-center">
-                      <div className="text-3xl mb-2">
-                        {bank === 'BROU' && '🏦'}
-                        {bank === 'Itaú' && '🔶'}
-                        {bank === 'Santander' && '🔴'}
-                        {bank === 'OCA' && '💳'}
-                        {bank === 'Prex' && '💰'}
-                        {bank === 'BHU' && '🏠'}
-                        {bank === 'IBM' && '📈'}
-                      </div>
+                    <div className="flex flex-col items-center gap-3">
+                      <BankLogo bank={bank} size="lg" />
                       <div className="font-semibold text-gray-900 dark:text-white">
                         {bank}
                       </div>

@@ -1,4 +1,11 @@
 import React from 'react';
+import brouLogo from '../../assets/bank-logos/brou.png';
+import itauLogo from '../../assets/bank-logos/itau.png';
+import santanderLogo from '../../assets/bank-logos/santander.png';
+import ocaLogo from '../../assets/bank-logos/oca.png';
+import prexLogo from '../../assets/bank-logos/prex.png';
+import bhuLogo from '../../assets/bank-logos/bhu.jpeg';
+import ibmLogo from '../../assets/bank-logos/ibm.png';
 
 interface BankLogoProps {
   bank: string;
@@ -13,33 +20,29 @@ const BankLogo: React.FC<BankLogoProps> = ({ bank, size = 'md', className = '' }
     lg: 'w-16 h-16'
   };
 
-  // Mapeo de bancos a archivos de logo
-  const bankLogoFiles: Record<string, string> = {
-    'BROU': '/bank-logos/brou.png',
-    'Itaú': '/bank-logos/itau.png',
-    'Santander': '/bank-logos/santander.png',
-    'OCA': '/bank-logos/oca.png',
-    'Prex': '/bank-logos/prex.png',
-    'BHU': '/bank-logos/bhu.jpeg',
-    'IBM': '/bank-logos/ibm.png'
+  // Mapeo de bancos a logos importados
+  const bankLogos: Record<string, string> = {
+    'BROU': brouLogo,
+    'Itaú': itauLogo,
+    'Santander': santanderLogo,
+    'OCA': ocaLogo,
+    'Prex': prexLogo,
+    'BHU': bhuLogo,
+    'IBM': ibmLogo
   };
 
   // Buscar logo por nombre exacto o parcial
-  const logoKey = Object.keys(bankLogoFiles).find(key =>
-    bank.toLowerCase().includes(key.toLowerCase()) ||
+  const logoKey = Object.keys(bankLogos).find(key => 
+    bank.toLowerCase().includes(key.toLowerCase()) || 
     key.toLowerCase().includes(bank.toLowerCase())
   );
 
   if (logoKey) {
     return (
-      <img
-        src={bankLogoFiles[logoKey]}
+      <img 
+        src={bankLogos[logoKey]} 
         alt={`${logoKey} logo`}
         className={`${sizeClasses[size]} ${className} object-contain rounded-lg`}
-        onError={(e) => {
-          // Fallback si la imagen no carga
-          e.currentTarget.style.display = 'none';
-        }}
       />
     );
   }
