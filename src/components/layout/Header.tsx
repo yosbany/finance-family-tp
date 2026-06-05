@@ -33,7 +33,7 @@ export const Header = () => {
           </div>
           
           {/* Usuario y Acciones */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-stretch gap-3">
             {user && (
               <>
                 <div className="flex items-center gap-3 bg-gray-700/50 dark:bg-gray-800/50 px-4 py-2 rounded-xl border border-gray-600 dark:border-gray-700">
@@ -41,7 +41,7 @@ export const Header = () => {
                     <img
                       src={user.photoURL}
                       alt={user.displayName || 'Usuario'}
-                      className="h-9 w-9 rounded-full object-cover ring-2 ring-green-500/50"
+                      className="h-8 w-8 rounded-full object-cover ring-2 ring-green-500/50"
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                         const fallback = e.currentTarget.nextElementSibling as HTMLElement;
@@ -50,7 +50,7 @@ export const Header = () => {
                     />
                   ) : null}
                   <div
-                    className="h-9 w-9 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-semibold text-sm ring-2 ring-green-500/50"
+                    className="h-8 w-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 text-white flex items-center justify-center font-semibold text-sm ring-2 ring-green-500/50"
                     style={{ display: user.photoURL ? 'none' : 'flex' }}
                   >
                     {user.displayName?.charAt(0).toUpperCase() || 'U'}
@@ -61,7 +61,7 @@ export const Header = () => {
                 </div>
                 <button
                   onClick={handleSignOut}
-                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-700/50 hover:bg-gray-600/50 dark:bg-gray-800/50 dark:hover:bg-gray-700/50 rounded-xl border border-gray-600 dark:border-gray-700 transition-all duration-200"
+                  className="px-6 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-700/50 hover:bg-gray-600/50 dark:bg-gray-800/50 dark:hover:bg-gray-700/50 rounded-xl border border-gray-600 dark:border-gray-700 transition-all duration-200"
                 >
                   Cerrar Sesión
                 </button>

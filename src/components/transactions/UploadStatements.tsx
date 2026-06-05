@@ -428,16 +428,23 @@ export const UploadStatements = () => {
                       setSelectedAccountType('debit');
                       setCurrentStep(3);
                     }}
-                    className="p-8 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-all hover:scale-105"
+                    className="group p-6 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/20"
                   >
-                    <div className="text-center">
-                      <div className="text-5xl mb-3">💳</div>
-                      <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                        Cuenta de Débito
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 transition-transform">
+                        💳
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Caja de ahorro, cuenta corriente
+                      <div className="text-left flex-1">
+                        <div className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                          Cuenta de Débito
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Caja de ahorro, cuenta corriente
+                        </div>
                       </div>
+                      <svg className="w-6 h-6 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
                   </button>
                 )}
@@ -447,16 +454,23 @@ export const UploadStatements = () => {
                       setSelectedAccountType('credit');
                       setCurrentStep(3);
                     }}
-                    className="p-8 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-all hover:scale-105"
+                    className="group p-6 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/20"
                   >
-                    <div className="text-center">
-                      <div className="text-5xl mb-3">💰</div>
-                      <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                        Tarjeta de Crédito
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 transition-transform">
+                        💰
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Visa, Mastercard, etc.
+                      <div className="text-left flex-1">
+                        <div className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                          Tarjeta de Crédito
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Visa, Mastercard, etc.
+                        </div>
                       </div>
+                      <svg className="w-6 h-6 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
                   </button>
                 )}
@@ -466,16 +480,23 @@ export const UploadStatements = () => {
                       setSelectedAccountType('investment');
                       setCurrentStep(3);
                     }}
-                    className="p-8 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-all hover:scale-105"
+                    className="group p-6 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-green-500 dark:hover:border-green-500 transition-all hover:shadow-lg hover:shadow-green-500/20"
                   >
-                    <div className="text-center">
-                      <div className="text-5xl mb-3">📈</div>
-                      <div className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                        Inversiones
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 transition-transform">
+                        📈
                       </div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        Acciones, bonos, fondos
+                      <div className="text-left flex-1">
+                        <div className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                          Inversiones
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          Acciones, bonos, fondos
+                        </div>
                       </div>
+                      <svg className="w-6 h-6 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
                   </button>
                 )}
