@@ -7,6 +7,7 @@ import { Account, Currency } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { Modal } from '../common/Modal';
+import BankLogo from '../common/BankLogo';
 
 export const AccountsManagement = () => {
   const { user } = useAuth();
@@ -480,9 +481,12 @@ export const AccountsManagement = () => {
           return (
             <div key={bank} className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
               <div className="bg-gray-50 dark:bg-gray-700 px-6 py-3 border-b border-gray-200 dark:border-gray-600">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {bank}
-                </h2>
+                <div className="flex items-center gap-3">
+                  <BankLogo bank={bank} size="md" />
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {bank}
+                  </h2>
+                </div>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {bankAccounts.map((account) => (

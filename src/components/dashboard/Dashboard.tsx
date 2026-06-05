@@ -10,6 +10,7 @@ import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/calculations';
 import { KPICard } from './KPICard';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import BankLogo from '../common/BankLogo';
 
 export const Dashboard = () => {
   const { user } = useAuth();
@@ -174,6 +175,7 @@ export const Dashboard = () => {
                 className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
               >
                 <div className="flex items-center gap-3">
+                  <BankLogo bank={account.bank} size="sm" />
                   <span className="text-2xl">
                     {account.type === 'credit' ? '💳' : account.type === 'investment' ? '📊' : '🏦'}
                   </span>
