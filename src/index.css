@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors font-medium;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors font-medium;
+  }
+
+  .btn-danger {
+    @apply bg-danger text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors font-medium;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-lg shadow-md p-6;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+  }
+}
+
+/* Estilos específicos para select en modo claro */
+select.input-field {
+  @apply bg-white text-gray-900;
+}
+
+/* Estilos específicos para select en modo oscuro */
+.dark select.input-field {
+  @apply bg-gray-700 text-white;
+}
+
+/* Estilos para las opciones del select */
+select.input-field option {
+  @apply bg-white text-gray-900;
+}
+
+.dark select.input-field option {
+  @apply bg-gray-700 text-white;
+}
+
+/* Made with Bob */
