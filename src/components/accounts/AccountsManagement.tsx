@@ -494,7 +494,6 @@ export const AccountsManagement = () => {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl">{getAccountTypeIcon(account.type)}</span>
                           <div>
                             <h3 className="font-semibold text-gray-900 dark:text-white">
                               {account.name}

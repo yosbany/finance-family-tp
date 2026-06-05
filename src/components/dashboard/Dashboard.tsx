@@ -176,9 +176,6 @@ export const Dashboard = () => {
               >
                 <div className="flex items-center gap-3">
                   <BankLogo bank={account.bank} size="sm" />
-                  <span className="text-2xl">
-                    {account.type === 'credit' ? '💳' : account.type === 'investment' ? '📊' : '🏦'}
-                  </span>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">
                       {account.name}
