@@ -170,6 +170,39 @@ export const deleteTransaction = async (transactionId: string): Promise<void> =>
   }
 };
 
+export const deleteTransactionsByFilter = async (filter: {
+  accountId?: string;
+  month?: number;
+  year?: number;
+}): Promise<number> => {
+  const transactions = await getTransactions();
+  const toDelete = transactions.filter(tx => {
+    if (filter.accountId && tx.accountId !== filter.accountId) return false;
+    if (filter.month !== undefined || filter.year !== undefined) {
+      const date = new Date(tx.date);
+      if (filter.month !== undefined && date.getMonth() + 1 !== filter.month) return false;
+      if (filter.year !== undefined && date.getFullYear() !== filter.year) return false;
+    }
+    return true;
+  });
+
+  for (const tx of toDelete) {
+    await deleteTransaction(tx.id);
+  }
+
+  return toDelete.length;
+};
+
+export const deleteAllTransactions = async (): Promise<number> => {
+  const transactionsRef = ref(database, familyPath('transactions'));
+  const snapshot = await get(transactionsRef);
+  if (!snapshot.exists()) return 0;
+
+  const count = Object.keys(snapshot.val()).length;
+  await remove(transactionsRef);
+  return count;
+};
+
 export const classifyTransaction = async (
   transactionId: string,
   categoryId: string,

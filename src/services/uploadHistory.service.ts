@@ -175,3 +175,33 @@ export const deleteUploadHistory = async (uploadId: string): Promise<void> => {
     throw error;
   }
 };
+
+export const deleteUploadHistoryByFilter = async (filter: {
+  accountId?: string;
+  month?: number;
+  year?: number;
+}): Promise<number> => {
+  const history = await getUploadHistory();
+  const toDelete = history.filter(upload => {
+    if (filter.accountId && upload.accountId !== filter.accountId) return false;
+    if (filter.month !== undefined && upload.statementMonth !== filter.month) return false;
+    if (filter.year !== undefined && upload.statementYear !== filter.year) return false;
+    return true;
+  });
+
+  for (const upload of toDelete) {
+    await deleteUploadHistory(upload.id);
+  }
+
+  return toDelete.length;
+};
+
+export const deleteAllUploadHistory = async (): Promise<number> => {
+  const uploadsRef = ref(database, familyPath('uploadHistory'));
+  const snapshot = await get(uploadsRef);
+  if (!snapshot.exists()) return 0;
+
+  const count = Object.keys(snapshot.val()).length;
+  await remove(uploadsRef);
+  return count;
+};

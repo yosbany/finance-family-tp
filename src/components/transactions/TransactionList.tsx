@@ -2,16 +2,22 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   getTransactions,
-  updateTransaction
+  updateTransaction,
+  deleteTransactionsByFilter,
+  deleteAllTransactions,
 } from '../../services/transactions.service';
-import { getAccounts } from '../../services/accounts.service';
+import { getAccounts, recalculateAccountBalance, recalculateAllAccountBalances } from '../../services/accounts.service';
 import {
   getCategories,
   addKeywordsToCategory,
   ensureTransferCategory,
   ensureReingresoIvaCategory
 } from '../../services/categories.service';
-import { getUploadHistory } from '../../services/uploadHistory.service';
+import {
+  getUploadHistory,
+  deleteUploadHistoryByFilter,
+  deleteAllUploadHistory,
+} from '../../services/uploadHistory.service';
 import { Transaction, Account, Category, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
@@ -24,7 +30,7 @@ export const TransactionList = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const uploadIdFilter = searchParams.get('uploadId');
-  const { showSuccess, showError, showInfo, ModalComponent } = useModal();
+  const { showSuccess, showError, showInfo, showConfirm, ModalComponent } = useModal();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -32,6 +38,7 @@ export const TransactionList = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recategorizing, setRecategorizing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,6 +49,18 @@ export const TransactionList = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // Limpieza por cuenta / período
+  const [deleteAccountId, setDeleteAccountId] = useState('');
+  const now = new Date();
+  const [deleteMonth, setDeleteMonth] = useState(now.getMonth() + 1);
+  const [deleteYear, setDeleteYear] = useState(now.getFullYear());
+  const [showCleanupPanel, setShowCleanupPanel] = useState(false);
+
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
   
   // Modal de categorización
   const [showCategorizeModal, setShowCategorizeModal] = useState(false);
@@ -92,6 +111,85 @@ export const TransactionList = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const countMatchingForCleanup = () => {
+    return transactions.filter(tx => {
+      if (deleteAccountId && tx.accountId !== deleteAccountId) return false;
+      const date = new Date(tx.date);
+      if (date.getMonth() + 1 !== deleteMonth) return false;
+      if (date.getFullYear() !== deleteYear) return false;
+      return true;
+    }).length;
+  };
+
+  const handleDeleteByAccountPeriod = () => {
+    if (!deleteAccountId) {
+      showError('Selecciona una cuenta');
+      return;
+    }
+
+    const account = accounts.find(a => a.id === deleteAccountId);
+    const count = countMatchingForCleanup();
+    const periodLabel = `${monthNames[deleteMonth - 1]} ${deleteYear}`;
+
+    if (count === 0) {
+      showInfo(`No hay transacciones de ${account?.name || 'esa cuenta'} en ${periodLabel}`);
+      return;
+    }
+
+    showConfirm({
+      title: 'Eliminar por cuenta y período',
+      message: `Se eliminarán ${count} transacción(es) de "${account?.name}" en ${periodLabel}, y el extracto de ese mes quedará como pendiente. ¿Continuar?`,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          setDeleting(true);
+          const deletedTx = await deleteTransactionsByFilter({
+            accountId: deleteAccountId,
+            month: deleteMonth,
+            year: deleteYear,
+          });
+          await deleteUploadHistoryByFilter({
+            accountId: deleteAccountId,
+            month: deleteMonth,
+            year: deleteYear,
+          });
+          await recalculateAccountBalance(deleteAccountId);
+          await loadData();
+          showSuccess(`Eliminadas ${deletedTx} transacciones de ${periodLabel}`);
+        } catch (err) {
+          console.error(err);
+          showError('No se pudieron eliminar las transacciones');
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteAllTransactions = () => {
+    showConfirm({
+      title: 'Limpiar todas las transacciones',
+      message: `Se eliminarán TODAS las transacciones (${transactions.length}) y el historial de extractos. Los saldos volverán al balance inicial. ¿Continuar?`,
+      confirmText: 'Limpiar todo',
+      onConfirm: async () => {
+        try {
+          setDeleting(true);
+          const deletedTx = await deleteAllTransactions();
+          await deleteAllUploadHistory();
+          await recalculateAllAccountBalances();
+          setSearchParams({});
+          await loadData();
+          showSuccess(`Limpieza completa: ${deletedTx} transacciones eliminadas`);
+        } catch (err) {
+          console.error(err);
+          showError('No se pudo limpiar las transacciones');
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
   };
 
   const openCategorizeModal = (transaction: Transaction) => {
@@ -310,11 +408,6 @@ export const TransactionList = () => {
     ? accounts.find(a => a.id === uploadInfo.accountId)
     : null;
 
-  const monthNames = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-  ];
-
   const clearUploadFilter = () => setSearchParams({});
 
   if (loading) return <LoadingSpinner />;
@@ -329,19 +422,105 @@ export const TransactionList = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <h1 className="page-title">
           Transacciones
         </h1>
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          {filteredTransactions.length} de {transactions.length} transacciones
-          {sortedPending.length > 0 && (
-            <span className="ml-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded-full text-xs font-medium">
-              {sortedPending.length} pendiente{sortedPending.length !== 1 ? 's' : ''}
-            </span>
-          )}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {filteredTransactions.length} de {transactions.length} transacciones
+            {sortedPending.length > 0 && (
+              <span className="ml-2 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded-full text-xs font-medium">
+                {sortedPending.length} pendiente{sortedPending.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCleanupPanel(prev => !prev)}
+            className="px-3 py-2 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50"
+          >
+            {showCleanupPanel ? 'Ocultar limpieza' : 'Limpiar / eliminar'}
+          </button>
         </div>
       </div>
+
+      {showCleanupPanel && (
+        <div className="card border border-red-200 dark:border-red-800 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Eliminar transacciones
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Podés borrar por cuenta y mes/año, o limpiar todo para empezar de cero.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="label">Cuenta</label>
+              <select
+                value={deleteAccountId}
+                onChange={(e) => setDeleteAccountId(e.target.value)}
+                className="input-field"
+              >
+                <option value="">Seleccionar cuenta</option>
+                {accounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.bank} · {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Mes</label>
+              <select
+                value={deleteMonth}
+                onChange={(e) => setDeleteMonth(parseInt(e.target.value, 10))}
+                className="input-field"
+              >
+                {monthNames.map((name, index) => (
+                  <option key={name} value={index + 1}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Año</label>
+              <select
+                value={deleteYear}
+                onChange={(e) => setDeleteYear(parseInt(e.target.value, 10))}
+                className="input-field"
+              >
+                {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleDeleteByAccountPeriod}
+              disabled={deleting || !deleteAccountId}
+              className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+            >
+              {deleting ? 'Eliminando...' : `Eliminar período (${countMatchingForCleanup()})`}
+            </button>
+          </div>
+
+          <div className="pt-3 border-t border-red-200 dark:border-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-sm text-red-700 dark:text-red-300">
+              Limpieza total: borra todas las transacciones y el historial de extractos.
+            </p>
+            <button
+              type="button"
+              onClick={handleDeleteAllTransactions}
+              disabled={deleting || transactions.length === 0}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              {deleting ? 'Limpiando...' : `Limpiar todas (${transactions.length})`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {uploadIdFilter && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -379,7 +558,7 @@ export const TransactionList = () => {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="🔍 Buscar en todas las columnas (descripción, cuenta, categoría, monto, fecha)..."
+                  placeholder="Buscar en todas las columnas (descripción, cuenta, categoría, monto, fecha)..."
                   className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
                 />
                 <span className="absolute left-3 top-3.5 text-gray-400">🔍</span>
