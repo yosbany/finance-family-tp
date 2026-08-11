@@ -14,9 +14,52 @@ import { parsePDF } from '../../parsers/pdfParser';
 import { parseByBank, detectBank, getParserInfo } from '../../parsers/banks';
 import { categorizeTransactions } from '../../utils/categorization';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
+import { getBankDownloadGuide } from '../../utils/bankDownloadGuides';
 import { Account, Category, Transaction, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
+
+const BankDownloadHelp = ({ bank }: { bank: string }) => {
+  const [open, setOpen] = useState(false);
+  const guide = getBankDownloadGuide(bank);
+  if (!guide) return null;
+
+  return (
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-sm font-medium text-blue-900 dark:text-blue-200">
+          Cómo descargar el extracto de {bank}
+        </span>
+        <span className="text-blue-700 dark:text-blue-300 text-xs">
+          Formatos: {guide.formats.join(', ')} · {open ? 'Ocultar' : 'Ver pasos'}
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-blue-200 dark:border-blue-800 pt-3">
+          <ol className="list-decimal list-inside space-y-1.5 text-sm text-blue-900 dark:text-blue-100">
+            {guide.steps.map((step, index) => (
+              <li key={index}>{step}</li>
+            ))}
+          </ol>
+          {guide.tips && guide.tips.length > 0 && (
+            <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
+              <p className="font-medium">Tips</p>
+              <ul className="list-disc list-inside space-y-1">
+                {guide.tips.map((tip, index) => (
+                  <li key={index}>{tip}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const UploadStatements = () => {
   const { user } = useAuth();
@@ -609,6 +652,7 @@ export const UploadStatements = () => {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Banco seleccionado: <span className="font-semibold">{selectedBank}</span>
               </p>
+              <BankDownloadHelp bank={selectedBank} />
               <div className={`grid grid-cols-1 ${availableAccountTypes.length > 1 ? 'md:grid-cols-2' : ''} gap-4`}>
                 {availableAccountTypes.includes('debit') && (
                   <button
@@ -768,6 +812,8 @@ export const UploadStatements = () => {
                   <strong>Cuenta seleccionada:</strong> {accounts.find(a => a.id === selectedAccount)?.name}
                 </div>
               </div>
+
+              {selectedBank && <BankDownloadHelp bank={selectedBank} />}
 
               {/* Selector de Mes/Año del Extracto - Solo para bancos que lo requieren */}
               {selectedBank !== 'BHU' && selectedBank !== 'IBM' && (

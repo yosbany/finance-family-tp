@@ -6,9 +6,10 @@ import { Transaction, ParsedTransaction } from '../types';
 const cleanUndefined = (obj: Record<string, unknown>): Record<string, unknown> => {
   const cleaned: Record<string, unknown> = {};
   for (const key in obj) {
-    if (obj[key] !== undefined) {
-      cleaned[key] = obj[key];
-    }
+    const value = obj[key];
+    if (value === undefined) continue;
+    if (typeof value === 'number' && !Number.isFinite(value)) continue;
+    cleaned[key] = value;
   }
   return cleaned;
 };
@@ -17,6 +18,10 @@ export const createTransaction = async (
   transaction: Omit<Transaction, 'id'>
 ): Promise<string> => {
   try {
+    if (!Number.isFinite(transaction.amount)) {
+      throw new Error(`Monto inválido en transacción: ${transaction.description}`);
+    }
+
     const transactionsRef = ref(database, familyPath('transactions'));
     const newTransactionRef = push(transactionsRef);
     const transactionId = newTransactionRef.key!;
@@ -24,6 +29,7 @@ export const createTransaction = async (
     const transactionData: Transaction = {
       ...transaction,
       id: transactionId,
+      amount: Number(transaction.amount),
       createdAt: Date.now()
     };
 
@@ -41,8 +47,13 @@ export const createTransactions = async (
 ): Promise<string[]> => {
   try {
     const ids: string[] = [];
+    const validTransactions = transactions.filter(tx => Number.isFinite(tx.amount));
 
-    for (const transaction of transactions) {
+    if (validTransactions.length === 0) {
+      throw new Error('No hay transacciones con montos válidos para guardar');
+    }
+
+    for (const transaction of validTransactions) {
       const id = await createTransaction({
         ...transaction,
         createdAt: Date.now()
