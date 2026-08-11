@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   getTransactions,
   updateTransaction,
@@ -818,12 +818,12 @@ export const TransactionList = () => {
               : 'No se encontraron transacciones con los filtros aplicados'}
           </p>
           {transactions.length === 0 && (
-            <a
-              href="/upload"
+            <Link
+              to="/transactions/upload"
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
             >
               📤 Cargar Extracto
-            </a>
+            </Link>
           )}
         </div>
       )}

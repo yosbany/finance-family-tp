@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   LineChart,
   Line,
@@ -227,12 +228,12 @@ export const FinancialAnalysis = () => {
           <p className="text-gray-500 dark:text-gray-400 mb-6">
             Carga tus extractos bancarios para ver análisis detallados de tus finanzas
           </p>
-          <a
-            href="/upload"
+          <Link
+            to="/transactions/upload"
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
           >
             📤 Cargar Extracto
-          </a>
+          </Link>
         </div>
       )}
 

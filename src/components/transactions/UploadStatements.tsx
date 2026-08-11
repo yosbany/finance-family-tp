@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { getAccounts } from '../../services/accounts.service';
@@ -966,7 +966,7 @@ export const UploadStatements = () => {
                       <p>⏳ Pendientes de clasificar: {result.details.pending}</p>
                       {result.details.pending > 0 && (
                         <p className="mt-2 text-blue-600 dark:text-blue-400">
-                          → <a href="/transactions" className="underline">Ver transacciones pendientes</a>
+                          → <Link to="/transactions" className="underline">Ver transacciones pendientes</Link>
                         </p>
                       )}
                     </div>
