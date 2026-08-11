@@ -29,7 +29,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter basename="/finance-family">
+    <BrowserRouter basename="/finance-family-tp">
       <Routes>
         <Route
           path="/login"
