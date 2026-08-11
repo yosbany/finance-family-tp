@@ -4,7 +4,7 @@
       ".read": "auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true",
       "$uid": {
         ".read": "$uid === auth.uid || (auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true)",
-        ".write": "auth != null && (($uid === auth.uid && newData.child('autorizado').val() === false && newData.child('familyRoot').val() === 'family' && (!data.exists() || data.child('autorizado').val() !== true)) || (auth.uid !== $uid && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true && data.exists() && newData.child('uid').val() === data.child('uid').val() && newData.child('familyRoot').val() === root.child('authorizedUsers').child(auth.uid).child('familyRoot').val()))"
+        ".write": "auth != null && (($uid === auth.uid && newData.child('autorizado').val() === false && newData.child('familyRoot').val() === 'family' && (!data.exists() || data.child('autorizado').val() !== true)) || (auth.uid !== $uid && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true && data.exists() && newData.child('uid').val() === data.child('uid').val() && newData.child('familyRoot').isString() && newData.child('familyRoot').val().length > 0 && newData.child('familyRoot').val().matches(/^[a-zA-Z0-9_-]+$/)))"
       }
     },
     "$familyRoot": {

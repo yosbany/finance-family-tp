@@ -107,17 +107,35 @@ export const approveUser = async (
     throw new Error('Usuario no encontrado');
   }
 
-  const target = normalizeAuthorizedUser({ ...(snapshot.val() as AuthorizedUser), uid: targetUid });
-
-  if (target.autorizado) {
-    return;
-  }
+  const familyRoot = (approver.familyRoot || '').trim() || DEFAULT_FAMILY_ROOT;
 
   await update(targetRef, {
     autorizado: true,
-    familyRoot: approver.familyRoot || DEFAULT_FAMILY_ROOT,
+    familyRoot,
     authorizedAt: Date.now(),
     authorizedBy: approver.uid,
+  });
+};
+
+export const updateMemberFamily = async (
+  targetUid: string,
+  familyRoot: string,
+  updaterUid: string
+): Promise<void> => {
+  const targetRef = ref(database, `authorizedUsers/${targetUid}`);
+  const snapshot = await get(targetRef);
+
+  if (!snapshot.exists()) {
+    throw new Error('Usuario no encontrado');
+  }
+
+  const root = familyRoot.trim() || DEFAULT_FAMILY_ROOT;
+
+  await update(targetRef, {
+    familyRoot: root,
+    authorizedBy: updaterUid,
+    authorizedAt: Date.now(),
+    autorizado: true,
   });
 };
 
@@ -131,7 +149,16 @@ export const revokeUserAccess = async (targetUid: string): Promise<void> => {
 
   await update(targetRef, {
     autorizado: false,
+    familyRoot: DEFAULT_FAMILY_ROOT,
     authorizedAt: null,
     authorizedBy: null,
   });
+};
+
+export const getKnownFamilyRoots = (members: AuthorizedUser[], currentFamilyRoot: string): string[] => {
+  const roots = new Set<string>([DEFAULT_FAMILY_ROOT, currentFamilyRoot]);
+  members.forEach(member => {
+    if (member.familyRoot) roots.add(member.familyRoot);
+  });
+  return Array.from(roots).sort();
 };
