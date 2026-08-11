@@ -45,6 +45,18 @@ const BankDownloadHelp = ({ bank }: { bank: string }) => {
               <li key={index}>{step}</li>
             ))}
           </ol>
+          {guide.visualHint && (
+            <div className="flex items-center gap-3 rounded-md bg-white/70 dark:bg-blue-950/40 px-3 py-2 border border-blue-200 dark:border-blue-800">
+              <img
+                src={guide.visualHint.src}
+                alt={guide.visualHint.alt}
+                className="w-10 h-10 object-contain shrink-0 rounded"
+              />
+              <p className="text-xs text-blue-800 dark:text-blue-200">
+                {guide.visualHint.caption}
+              </p>
+            </div>
+          )}
           {guide.tips && guide.tips.length > 0 && (
             <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
               <p className="font-medium">Tips</p>

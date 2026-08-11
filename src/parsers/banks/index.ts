@@ -6,7 +6,7 @@ import { parseItauDebitCSV, parseItauCreditCSV, parseItauCreditPDF, parseItauExc
 import { parseSantanderDebitCSV, parseSantanderCreditCSV, parseSantanderExcel } from './santanderParser';
 import { parseOCAMasterCSV, parseOCAVisaCSV, parseOCAExcel } from './ocaParser';
 import { parsePrexCSV, parsePrexExcel } from './prexParser';
-import { parseBHUCSV, parseBHUExcel, parseBHUPDF } from './bhuParser';
+import { parseBHUCSV, parseBHUExcel, parseBHUPDFText } from './bhuParser';
 import { parseIBMExcel } from './ibmParser';
 
 // Configurar el worker de PDF.js - usar worker local de node_modules
@@ -93,7 +93,7 @@ export const getBankParser = (config: BankParserConfig) => {
       return parseBHUExcel;
     }
     if (fileType === 'pdf') {
-      return parseBHUPDF;
+      return parseBHUPDFText;
     }
   }
 

@@ -1,8 +1,16 @@
+import bhuDownloadIcon from '../assets/bank-guides/bhu-download-icon.png';
+
 export interface BankDownloadGuide {
   bank: string;
   formats: string[];
   steps: string[];
   tips?: string[];
+  /** Optional image shown under the steps (e.g. bank UI icon). */
+  visualHint?: {
+    src: string;
+    alt: string;
+    caption: string;
+  };
 }
 
 export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
@@ -86,17 +94,25 @@ export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
   },
   BHU: {
     bank: 'BHU',
-    formats: ['PDF', 'Excel', 'CSV'],
+    formats: ['PDF'],
     steps: [
-      'Entrá a BHU Online e iniciá sesión.',
-      'Andá a la cuenta YO AHORRO / producto correspondiente.',
-      'Consultá movimientos o extracto del período.',
-      'Descargá en PDF (frecuente) o Excel/CSV.',
-      'Subí el archivo acá: BHU → Débito.',
+      'Entrá a https://bhu.com.uy/',
+      'Hacé clic en “Consulta de cuentas de ahorro”.',
+      'Hacé clic en “Acceso a la consulta de cuentas de ahorro”.',
+      'Iniciá sesión con tu usuario gub.uy (ID Uruguay).',
+      'Andá a la sección “Estado de Cuenta”.',
+      'Descargá el PDF con el ícono de descarga (flecha hacia abajo sobre una bandeja).',
+      'Subí ese PDF acá: BHU → Débito.',
     ],
     tips: [
+      'Usá solo el PDF del estado de cuenta (texto), no una captura o escaneo.',
       'Algunos extractos BHU usan UI (Unidades Indexadas); la app intenta interpretarlos.',
     ],
+    visualHint: {
+      src: bhuDownloadIcon,
+      alt: 'Ícono de descarga del BHU',
+      caption: 'Ícono para descargar el PDF en Estado de Cuenta',
+    },
   },
   IBM: {
     bank: 'IBM',
