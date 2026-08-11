@@ -1,9 +1,9 @@
 {
-  "name": "finance-family-tp",
+  "name": "finance-family",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "homepage": "https://yosbany.github.io/finance-family-tp",
+  "homepage": "https://yosbany.github.io/finance-family",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

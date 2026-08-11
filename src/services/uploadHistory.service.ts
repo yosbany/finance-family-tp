@@ -1,21 +1,21 @@
-import { ref, push, set, get, query, orderByChild, equalTo, update } from 'firebase/database';
+import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
+import { familyPath } from './familyPaths';
 import { UploadHistory } from '../types';
 
 export const createUploadHistory = async (
-  userId: string,
   uploadData: Omit<UploadHistory, 'id'>
 ): Promise<string> => {
   try {
-    const uploadsRef = ref(database, `uploadHistory/${userId}`);
+    const uploadsRef = ref(database, familyPath('uploadHistory'));
     const newUploadRef = push(uploadsRef);
     const uploadId = newUploadRef.key!;
-    
+
     const historyData: UploadHistory = {
       ...uploadData,
       id: uploadId
     };
-    
+
     await set(newUploadRef, historyData);
     return uploadId;
   } catch (error) {
@@ -24,19 +24,18 @@ export const createUploadHistory = async (
   }
 };
 
-export const getUploadHistory = async (userId: string): Promise<UploadHistory[]> => {
+export const getUploadHistory = async (): Promise<UploadHistory[]> => {
   try {
-    const uploadsRef = ref(database, `uploadHistory/${userId}`);
+    const uploadsRef = ref(database, familyPath('uploadHistory'));
     const snapshot = await get(uploadsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const uploadsData = snapshot.val();
     const uploads = Object.values(uploadsData) as UploadHistory[];
-    
-    // Ordenar por fecha de carga (más reciente primero)
+
     return uploads.sort((a, b) => b.uploadDate - a.uploadDate);
   } catch (error) {
     console.error('Error al obtener historial de cargas:', error);
@@ -44,21 +43,18 @@ export const getUploadHistory = async (userId: string): Promise<UploadHistory[]>
   }
 };
 
-export const checkDuplicateUpload = async (
-  userId: string,
-  fileHash: string
-): Promise<boolean> => {
+export const checkDuplicateUpload = async (fileHash: string): Promise<boolean> => {
   try {
-    const uploadsRef = ref(database, `uploadHistory/${userId}`);
+    const uploadsRef = ref(database, familyPath('uploadHistory'));
     const snapshot = await get(uploadsRef);
-    
+
     if (!snapshot.exists()) {
       return false;
     }
-    
+
     const uploadsData = snapshot.val();
     const uploads = Object.values(uploadsData) as UploadHistory[];
-    
+
     return uploads.some(upload => upload.fileHash === fileHash);
   } catch (error) {
     console.error('Error al verificar duplicado:', error);
@@ -66,21 +62,18 @@ export const checkDuplicateUpload = async (
   }
 };
 
-export const getUploadsByAccount = async (
-  userId: string,
-  accountId: string
-): Promise<UploadHistory[]> => {
+export const getUploadsByAccount = async (accountId: string): Promise<UploadHistory[]> => {
   try {
-    const uploadsRef = ref(database, `uploadHistory/${userId}`);
+    const uploadsRef = ref(database, familyPath('uploadHistory'));
     const snapshot = await get(uploadsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const uploadsData = snapshot.val();
     const uploads = Object.values(uploadsData) as UploadHistory[];
-    
+
     return uploads
       .filter(upload => upload.accountId === accountId)
       .sort((a, b) => b.uploadDate - a.uploadDate);
@@ -90,18 +83,15 @@ export const getUploadsByAccount = async (
   }
 };
 
-export const getUploadById = async (
-  userId: string,
-  uploadId: string
-): Promise<UploadHistory | null> => {
+export const getUploadById = async (uploadId: string): Promise<UploadHistory | null> => {
   try {
-    const uploadRef = ref(database, `uploadHistory/${userId}/${uploadId}`);
+    const uploadRef = ref(database, familyPath('uploadHistory', uploadId));
     const snapshot = await get(uploadRef);
-    
+
     if (!snapshot.exists()) {
       return null;
     }
-    
+
     return snapshot.val() as UploadHistory;
   } catch (error) {
     console.error('Error al obtener carga:', error);
@@ -109,36 +99,31 @@ export const getUploadById = async (
   }
 };
 
-/**
- * Migra registros antiguos sin statementMonth/statementYear
- * Asigna Junio 2026 (6/2026) a todos los registros sin fecha
- */
-export const migrateOldUploads = async (userId: string): Promise<number> => {
+export const migrateOldUploads = async (): Promise<number> => {
   try {
-    const uploadsRef = ref(database, `uploadHistory/${userId}`);
+    const uploadsRef = ref(database, familyPath('uploadHistory'));
     const snapshot = await get(uploadsRef);
-    
+
     if (!snapshot.exists()) {
       return 0;
     }
-    
+
     const uploadsData = snapshot.val();
     let migratedCount = 0;
-    
+
     for (const [uploadId, upload] of Object.entries(uploadsData)) {
-      const uploadRecord = upload as any;
-      
-      // Si no tiene statementMonth o statementYear, actualizar
+      const uploadRecord = upload as UploadHistory;
+
       if (!uploadRecord.statementMonth || !uploadRecord.statementYear) {
-        const uploadRef = ref(database, `uploadHistory/${userId}/${uploadId}`);
+        const uploadRef = ref(database, familyPath('uploadHistory', uploadId));
         await update(uploadRef, {
-          statementMonth: 6,  // Junio
+          statementMonth: 6,
           statementYear: 2026
         });
         migratedCount++;
       }
     }
-    
+
     return migratedCount;
   } catch (error) {
     console.error('Error al migrar cargas antiguas:', error);
@@ -146,4 +131,47 @@ export const migrateOldUploads = async (userId: string): Promise<number> => {
   }
 };
 
-// Made with Bob
+export const getUploadForAccountPeriod = async (
+  accountId: string,
+  month: number,
+  year: number
+): Promise<UploadHistory | null> => {
+  const history = await getUploadHistory();
+  return history.find(
+    u => u.accountId === accountId && u.statementMonth === month && u.statementYear === year
+  ) ?? null;
+};
+
+export const markAccountNoMovements = async (
+  accountId: string,
+  month: number,
+  year: number,
+  uploadedBy: string
+): Promise<string> => {
+  const existing = await getUploadForAccountPeriod(accountId, month, year);
+  if (existing) {
+    throw new Error('Este período ya está registrado para esta cuenta');
+  }
+
+  return createUploadHistory({
+    fileName: 'Sin movimientos',
+    fileHash: `no-movements:${accountId}:${year}-${String(month).padStart(2, '0')}`,
+    uploadedBy,
+    uploadDate: Date.now(),
+    accountId,
+    transactionsCount: 0,
+    status: 'no_movements',
+    statementMonth: month,
+    statementYear: year
+  });
+};
+
+export const deleteUploadHistory = async (uploadId: string): Promise<void> => {
+  try {
+    const uploadRef = ref(database, familyPath('uploadHistory', uploadId));
+    await remove(uploadRef);
+  } catch (error) {
+    console.error('Error al eliminar registro de carga:', error);
+    throw error;
+  }
+};

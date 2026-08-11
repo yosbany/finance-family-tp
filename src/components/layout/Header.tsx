@@ -26,9 +26,9 @@ export const Header = () => {
             </div>
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
-                Finanzas Familiares
+                Finance Family
               </h1>
-              <p className="text-xs text-gray-400 mt-0.5">Gestiona tus finanzas de manera inteligente</p>
+              <p className="text-xs text-gray-300 mt-0.5">Gestiona tus finanzas de manera inteligente</p>
             </div>
           </div>
           

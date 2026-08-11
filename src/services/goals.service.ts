@@ -1,19 +1,21 @@
 import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
-import { Goal, GoalStatus } from '../types';
+import { familyPath } from './familyPaths';
+import { Goal, GoalStatus, Account } from '../types';
+import { calculateGoalCurrentAmount } from '../utils/calculations';
 
-export const createGoal = async (userId: string, goal: Omit<Goal, 'id' | 'createdAt'>): Promise<string> => {
+export const createGoal = async (goal: Omit<Goal, 'id' | 'createdAt'>): Promise<string> => {
   try {
-    const goalsRef = ref(database, `goals/${userId}`);
+    const goalsRef = ref(database, familyPath('goals'));
     const newGoalRef = push(goalsRef);
     const goalId = newGoalRef.key!;
-    
+
     const goalData: Goal = {
       ...goal,
       id: goalId,
       createdAt: Date.now()
     };
-    
+
     await set(newGoalRef, goalData);
     return goalId;
   } catch (error) {
@@ -22,15 +24,15 @@ export const createGoal = async (userId: string, goal: Omit<Goal, 'id' | 'create
   }
 };
 
-export const getGoals = async (userId: string): Promise<Goal[]> => {
+export const getGoals = async (): Promise<Goal[]> => {
   try {
-    const goalsRef = ref(database, `goals/${userId}`);
+    const goalsRef = ref(database, familyPath('goals'));
     const snapshot = await get(goalsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const goalsData = snapshot.val();
     return Object.values(goalsData) as Goal[];
   } catch (error) {
@@ -39,15 +41,15 @@ export const getGoals = async (userId: string): Promise<Goal[]> => {
   }
 };
 
-export const getGoalById = async (userId: string, goalId: string): Promise<Goal | null> => {
+export const getGoalById = async (goalId: string): Promise<Goal | null> => {
   try {
-    const goalRef = ref(database, `goals/${userId}/${goalId}`);
+    const goalRef = ref(database, familyPath('goals', goalId));
     const snapshot = await get(goalRef);
-    
+
     if (!snapshot.exists()) {
       return null;
     }
-    
+
     return snapshot.val() as Goal;
   } catch (error) {
     console.error('Error al obtener objetivo:', error);
@@ -55,13 +57,9 @@ export const getGoalById = async (userId: string, goalId: string): Promise<Goal 
   }
 };
 
-export const updateGoal = async (
-  userId: string,
-  goalId: string,
-  updates: Partial<Goal>
-): Promise<void> => {
+export const updateGoal = async (goalId: string, updates: Partial<Goal>): Promise<void> => {
   try {
-    const goalRef = ref(database, `goals/${userId}/${goalId}`);
+    const goalRef = ref(database, familyPath('goals', goalId));
     await update(goalRef, updates);
   } catch (error) {
     console.error('Error al actualizar objetivo:', error);
@@ -69,9 +67,9 @@ export const updateGoal = async (
   }
 };
 
-export const deleteGoal = async (userId: string, goalId: string): Promise<void> => {
+export const deleteGoal = async (goalId: string): Promise<void> => {
   try {
-    const goalRef = ref(database, `goals/${userId}/${goalId}`);
+    const goalRef = ref(database, familyPath('goals', goalId));
     await remove(goalRef);
   } catch (error) {
     console.error('Error al eliminar objetivo:', error);
@@ -79,13 +77,9 @@ export const deleteGoal = async (userId: string, goalId: string): Promise<void> 
   }
 };
 
-export const updateGoalProgress = async (
-  userId: string,
-  goalId: string,
-  currentAmount: number
-): Promise<void> => {
+export const updateGoalProgress = async (goalId: string, currentAmount: number): Promise<void> => {
   try {
-    const goal = await getGoalById(userId, goalId);
+    const goal = await getGoalById(goalId);
     if (!goal) throw new Error('Objetivo no encontrado');
 
     const updates: Partial<Goal> = {
@@ -93,16 +87,46 @@ export const updateGoalProgress = async (
       status: currentAmount >= goal.targetAmount ? 'completed' : 'active'
     };
 
-    await updateGoal(userId, goalId, updates);
+    await updateGoal(goalId, updates);
   } catch (error) {
     console.error('Error al actualizar progreso:', error);
     throw error;
   }
 };
 
-export const getActiveGoals = async (userId: string): Promise<Goal[]> => {
+export const syncGoalsProgressFromAccounts = async (
+  goals: Goal[],
+  accounts: Account[]
+): Promise<Goal[]> => {
+  const synced: Goal[] = [];
+
+  for (const goal of goals) {
+    if (!goal.linkedAccountIds?.length) {
+      synced.push(goal);
+      continue;
+    }
+
+    const currentAmount = calculateGoalCurrentAmount(goal, accounts);
+    const status: GoalStatus =
+      goal.status === 'cancelled'
+        ? 'cancelled'
+        : currentAmount >= goal.targetAmount
+          ? 'completed'
+          : 'active';
+
+    if (currentAmount !== goal.currentAmount || status !== goal.status) {
+      await updateGoal(goal.id, { currentAmount, status });
+    }
+
+    synced.push({ ...goal, currentAmount, status });
+  }
+
+  return synced;
+};
+
+export const getActiveGoals = async (): Promise<Goal[]> => {
   try {
-    const goals = await getGoals(userId);
+    const goals = await getGoals();
     return goals.filter(g => g.status === 'active');
   } catch (error) {
     console.error('Error al obtener objetivos activos:', error);
@@ -110,9 +134,9 @@ export const getActiveGoals = async (userId: string): Promise<Goal[]> => {
   }
 };
 
-export const getCompletedGoals = async (userId: string): Promise<Goal[]> => {
+export const getCompletedGoals = async (): Promise<Goal[]> => {
   try {
-    const goals = await getGoals(userId);
+    const goals = await getGoals();
     return goals.filter(g => g.status === 'completed');
   } catch (error) {
     console.error('Error al obtener objetivos completados:', error);
@@ -120,21 +144,19 @@ export const getCompletedGoals = async (userId: string): Promise<Goal[]> => {
   }
 };
 
-// Inicializar objetivo predeterminado
-export const initializeDefaultGoal = async (userId: string): Promise<void> => {
+export const initializeDefaultGoal = async (): Promise<void> => {
   try {
-    await createGoal(userId, {
+    await createGoal({
       name: "Comprar Casa Nueva",
       targetAmount: 100000,
       currentAmount: 0,
       currency: 'USD',
-      deadline: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 año desde ahora
-      status: 'active'
+      deadline: Date.now() + (365 * 24 * 60 * 60 * 1000),
+      status: 'active',
+      linkedAccountIds: []
     });
   } catch (error) {
     console.error('Error al inicializar objetivo predeterminado:', error);
     throw error;
   }
 };
-
-// Made with Bob

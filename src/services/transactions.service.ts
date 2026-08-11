@@ -1,10 +1,10 @@
-import { ref, push, set, get, update, remove, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
+import { familyPath } from './familyPaths';
 import { Transaction, ParsedTransaction } from '../types';
 
-// Función auxiliar para limpiar valores undefined
-const cleanUndefined = (obj: any): any => {
-  const cleaned: any = {};
+const cleanUndefined = (obj: Record<string, unknown>): Record<string, unknown> => {
+  const cleaned: Record<string, unknown> = {};
   for (const key in obj) {
     if (obj[key] !== undefined) {
       cleaned[key] = obj[key];
@@ -14,23 +14,20 @@ const cleanUndefined = (obj: any): any => {
 };
 
 export const createTransaction = async (
-  userId: string,
   transaction: Omit<Transaction, 'id'>
 ): Promise<string> => {
   try {
-    const transactionsRef = ref(database, `transactions/${userId}`);
+    const transactionsRef = ref(database, familyPath('transactions'));
     const newTransactionRef = push(transactionsRef);
     const transactionId = newTransactionRef.key!;
-    
+
     const transactionData: Transaction = {
       ...transaction,
       id: transactionId,
       createdAt: Date.now()
     };
-    
-    // Limpiar valores undefined antes de guardar en Firebase
-    const cleanedData = cleanUndefined(transactionData);
-    
+
+    const cleanedData = cleanUndefined(transactionData as unknown as Record<string, unknown>);
     await set(newTransactionRef, cleanedData);
     return transactionId;
   } catch (error) {
@@ -40,20 +37,19 @@ export const createTransaction = async (
 };
 
 export const createTransactions = async (
-  userId: string,
   transactions: Omit<Transaction, 'id' | 'createdAt'>[]
 ): Promise<string[]> => {
   try {
     const ids: string[] = [];
-    
+
     for (const transaction of transactions) {
-      const id = await createTransaction(userId, {
+      const id = await createTransaction({
         ...transaction,
         createdAt: Date.now()
       });
       ids.push(id);
     }
-    
+
     return ids;
   } catch (error) {
     console.error('Error al crear transacciones:', error);
@@ -61,19 +57,18 @@ export const createTransactions = async (
   }
 };
 
-export const getTransactions = async (userId: string): Promise<Transaction[]> => {
+export const getTransactions = async (): Promise<Transaction[]> => {
   try {
-    const transactionsRef = ref(database, `transactions/${userId}`);
+    const transactionsRef = ref(database, familyPath('transactions'));
     const snapshot = await get(transactionsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const transactionsData = snapshot.val();
     const transactions = Object.values(transactionsData) as Transaction[];
-    
-    // Ordenar por fecha (más reciente primero)
+
     return transactions.sort((a, b) => b.date - a.date);
   } catch (error) {
     console.error('Error al obtener transacciones:', error);
@@ -81,18 +76,15 @@ export const getTransactions = async (userId: string): Promise<Transaction[]> =>
   }
 };
 
-export const getTransactionById = async (
-  userId: string,
-  transactionId: string
-): Promise<Transaction | null> => {
+export const getTransactionById = async (transactionId: string): Promise<Transaction | null> => {
   try {
-    const transactionRef = ref(database, `transactions/${userId}/${transactionId}`);
+    const transactionRef = ref(database, familyPath('transactions', transactionId));
     const snapshot = await get(transactionRef);
-    
+
     if (!snapshot.exists()) {
       return null;
     }
-    
+
     return snapshot.val() as Transaction;
   } catch (error) {
     console.error('Error al obtener transacción:', error);
@@ -100,21 +92,18 @@ export const getTransactionById = async (
   }
 };
 
-export const getTransactionsByAccount = async (
-  userId: string,
-  accountId: string
-): Promise<Transaction[]> => {
+export const getTransactionsByAccount = async (accountId: string): Promise<Transaction[]> => {
   try {
-    const transactionsRef = ref(database, `transactions/${userId}`);
+    const transactionsRef = ref(database, familyPath('transactions'));
     const snapshot = await get(transactionsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const transactionsData = snapshot.val();
     const transactions = Object.values(transactionsData) as Transaction[];
-    
+
     return transactions
       .filter(t => t.accountId === accountId)
       .sort((a, b) => b.date - a.date);
@@ -125,20 +114,19 @@ export const getTransactionsByAccount = async (
 };
 
 export const getTransactionsByStatus = async (
-  userId: string,
   status: 'pending' | 'classified' | 'verified'
 ): Promise<Transaction[]> => {
   try {
-    const transactionsRef = ref(database, `transactions/${userId}`);
+    const transactionsRef = ref(database, familyPath('transactions'));
     const snapshot = await get(transactionsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const transactionsData = snapshot.val();
     const transactions = Object.values(transactionsData) as Transaction[];
-    
+
     return transactions
       .filter(t => t.status === status)
       .sort((a, b) => b.date - a.date);
@@ -149,12 +137,11 @@ export const getTransactionsByStatus = async (
 };
 
 export const updateTransaction = async (
-  userId: string,
   transactionId: string,
   updates: Partial<Transaction>
 ): Promise<void> => {
   try {
-    const transactionRef = ref(database, `transactions/${userId}/${transactionId}`);
+    const transactionRef = ref(database, familyPath('transactions', transactionId));
     await update(transactionRef, updates);
   } catch (error) {
     console.error('Error al actualizar transacción:', error);
@@ -162,12 +149,9 @@ export const updateTransaction = async (
   }
 };
 
-export const deleteTransaction = async (
-  userId: string,
-  transactionId: string
-): Promise<void> => {
+export const deleteTransaction = async (transactionId: string): Promise<void> => {
   try {
-    const transactionRef = ref(database, `transactions/${userId}/${transactionId}`);
+    const transactionRef = ref(database, familyPath('transactions', transactionId));
     await remove(transactionRef);
   } catch (error) {
     console.error('Error al eliminar transacción:', error);
@@ -176,13 +160,12 @@ export const deleteTransaction = async (
 };
 
 export const classifyTransaction = async (
-  userId: string,
   transactionId: string,
   categoryId: string,
   subcategoryId?: string
 ): Promise<void> => {
   try {
-    await updateTransaction(userId, transactionId, {
+    await updateTransaction(transactionId, {
       category: categoryId,
       subcategory: subcategoryId,
       status: 'classified'
@@ -193,12 +176,9 @@ export const classifyTransaction = async (
   }
 };
 
-export const verifyTransaction = async (
-  userId: string,
-  transactionId: string
-): Promise<void> => {
+export const verifyTransaction = async (transactionId: string): Promise<void> => {
   try {
-    await updateTransaction(userId, transactionId, {
+    await updateTransaction(transactionId, {
       status: 'verified'
     });
   } catch (error) {
@@ -207,7 +187,6 @@ export const verifyTransaction = async (
   }
 };
 
-// Convertir ParsedTransaction a Transaction
 export const parsedToTransaction = (
   parsed: ParsedTransaction,
   accountId: string,
@@ -226,5 +205,3 @@ export const parsedToTransaction = (
     uploadId
   };
 };
-
-// Made with Bob

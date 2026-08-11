@@ -1,39 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   getGoals,
   createGoal,
   updateGoal,
-  updateGoalProgress,
-  deleteGoal
+  deleteGoal,
+  syncGoalsProgressFromAccounts
 } from '../../services/goals.service';
-import { Goal, Currency, GoalStatus } from '../../types';
+import { getAccounts } from '../../services/accounts.service';
+import { Goal, Account, Currency, GoalStatus } from '../../types';
+import { calculateGoalCurrentAmount } from '../../utils/calculations';
+import { getOwners, Owner } from '../../services/owners.service';
+import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { useAuth } from '../../hooks/useAuth';
+import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 
 export const GoalsManagement = () => {
   const { user } = useAuth();
+  const { showError, showConfirm, ModalComponent } = useModal();
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [updatingProgress, setUpdatingProgress] = useState<string | null>(null);
-  const [progressAmount, setProgressAmount] = useState<number>(0);
-  
-  // Form state
+
   const [formData, setFormData] = useState({
     name: '',
     targetAmount: 0,
-    currentAmount: 0,
     currency: 'USD' as Currency,
     deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'active' as GoalStatus
+    status: 'active' as GoalStatus,
+    linkedAccountIds: [] as string[]
   });
 
   useEffect(() => {
-    loadGoals();
+    loadData();
   }, [user]);
 
-  const loadGoals = async () => {
+  const loadData = async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -41,42 +46,82 @@ export const GoalsManagement = () => {
 
     try {
       setLoading(true);
-      const data = await getGoals(user.uid);
-      setGoals(data.sort((a, b) => {
-        // Activos primero, luego por fecha de creación
+      const [goalsData, accountsData, ownersData] = await Promise.all([
+        getGoals(),
+        getAccounts(),
+        getOwners()
+      ]);
+
+      const normalizedGoals = goalsData.map(g => ({
+        ...g,
+        linkedAccountIds: g.linkedAccountIds ?? []
+      }));
+
+      const syncedGoals = await syncGoalsProgressFromAccounts(
+        normalizedGoals,
+        accountsData
+      );
+
+      setAccounts(accountsData);
+      setOwners(ownersData);
+      setGoals(syncedGoals.sort((a, b) => {
         if (a.status === 'active' && b.status !== 'active') return -1;
         if (a.status !== 'active' && b.status === 'active') return 1;
         return b.createdAt - a.createdAt;
       }));
     } catch (err) {
       console.error('Error al cargar objetivos:', err);
-      setGoals([]); // Asegurar que goals esté vacío en caso de error
+      setGoals([]);
+      setAccounts([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const previewCurrentAmount = useMemo(() => {
+    if (!formData.linkedAccountIds.length) return 0;
+    return calculateGoalCurrentAmount(
+      { currency: formData.currency, linkedAccountIds: formData.linkedAccountIds, currentAmount: 0 },
+      accounts
+    );
+  }, [formData.currency, formData.linkedAccountIds, accounts]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
+    if (formData.linkedAccountIds.length === 0) {
+      showError('Selecciona al menos una cuenta para calcular el avance automáticamente');
+      return;
+    }
+
     try {
+      const currentAmount = calculateGoalCurrentAmount(
+        { currency: formData.currency, linkedAccountIds: formData.linkedAccountIds, currentAmount: 0 },
+        accounts
+      );
+
       const goalData = {
-        ...formData,
-        deadline: new Date(formData.deadline).getTime()
+        name: formData.name,
+        targetAmount: formData.targetAmount,
+        currentAmount,
+        currency: formData.currency,
+        deadline: new Date(formData.deadline).getTime(),
+        status: (currentAmount >= formData.targetAmount ? 'completed' : formData.status) as GoalStatus,
+        linkedAccountIds: formData.linkedAccountIds
       };
 
       if (editingId) {
-        await updateGoal(user.uid, editingId, goalData);
+        await updateGoal(editingId, goalData);
       } else {
-        await createGoal(user.uid, goalData);
+        await createGoal(goalData);
       }
 
-      await loadGoals();
+      await loadData();
       resetForm();
     } catch (err) {
       console.error('Error al guardar objetivo:', err);
-      alert('Error al guardar el objetivo');
+      showError('Error al guardar el objetivo');
     }
   };
 
@@ -85,87 +130,80 @@ export const GoalsManagement = () => {
     setFormData({
       name: goal.name,
       targetAmount: goal.targetAmount,
-      currentAmount: goal.currentAmount,
       currency: goal.currency,
       deadline: new Date(goal.deadline).toISOString().split('T')[0],
-      status: goal.status
+      status: goal.status,
+      linkedAccountIds: goal.linkedAccountIds ?? []
     });
     setShowForm(true);
   };
 
-  const handleDelete = async (goalId: string) => {
+  const handleDelete = (goalId: string) => {
     if (!user) return;
-    if (!confirm('¿Estás seguro de eliminar este objetivo?')) return;
 
-    try {
-      await deleteGoal(user.uid, goalId);
-      await loadGoals();
-    } catch (err) {
-      console.error('Error al eliminar objetivo:', err);
-      alert('Error al eliminar el objetivo');
-    }
+    showConfirm({
+      title: 'Confirmar eliminación',
+      message: '¿Estás seguro de eliminar este objetivo?',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteGoal(goalId);
+          await loadData();
+        } catch (err) {
+          console.error('Error al eliminar objetivo:', err);
+          showError('Error al eliminar el objetivo');
+        }
+      },
+    });
   };
 
-  const handleUpdateProgress = async (goalId: string) => {
-    if (!user) return;
-
-    try {
-      await updateGoalProgress(user.uid, goalId, progressAmount);
-      await loadGoals();
-      setUpdatingProgress(null);
-      setProgressAmount(0);
-    } catch (err) {
-      console.error('Error al actualizar progreso:', err);
-      alert('Error al actualizar el progreso');
-    }
+  const toggleAccount = (accountId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      linkedAccountIds: prev.linkedAccountIds.includes(accountId)
+        ? prev.linkedAccountIds.filter(id => id !== accountId)
+        : [...prev.linkedAccountIds, accountId]
+    }));
   };
 
   const resetForm = () => {
     setFormData({
       name: '',
       targetAmount: 0,
-      currentAmount: 0,
       currency: 'USD',
       deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      status: 'active'
+      status: 'active',
+      linkedAccountIds: []
     });
     setEditingId(null);
     setShowForm(false);
   };
 
-  const formatCurrency = (value: number, currency: Currency) => {
-    return new Intl.NumberFormat('es-UY', {
-      style: 'currency',
-      currency
-    }).format(value);
-  };
+  const formatCurrency = (value: number, currency: Currency) =>
+    new Intl.NumberFormat('es-UY', { style: 'currency', currency }).format(value);
 
-  const calculateProgress = (current: number, target: number) => {
-    return Math.min(Math.round((current / target) * 100), 100);
-  };
+  const calculateProgress = (current: number, target: number) =>
+    target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
 
-  const getDaysRemaining = (deadline: number) => {
-    const days = Math.ceil((deadline - Date.now()) / (1000 * 60 * 60 * 24));
-    return days;
-  };
+  const getDaysRemaining = (deadline: number) =>
+    Math.ceil((deadline - Date.now()) / (1000 * 60 * 60 * 24));
 
-  const getStatusColor = (status: GoalStatus) => {
-    const colors = {
-      active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-      completed: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-      cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-    };
-    return colors[status];
-  };
+  const getStatusColor = (status: GoalStatus) => ({
+    active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
+    completed: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+    cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+  }[status]);
 
-  const getStatusLabel = (status: GoalStatus) => {
-    const labels = {
-      active: 'Activo',
-      completed: 'Completado',
-      cancelled: 'Cancelado'
-    };
-    return labels[status];
-  };
+  const getStatusLabel = (status: GoalStatus) => ({
+    active: 'Activo',
+    completed: 'Completado',
+    cancelled: 'Cancelado'
+  }[status]);
+
+  const getLinkedAccounts = (goal: Goal) =>
+    (goal.linkedAccountIds ?? [])
+      .map(id => accounts.find(a => a.id === id))
+      .filter((a): a is Account => !!a);
 
   if (loading) return <LoadingSpinner />;
 
@@ -175,9 +213,7 @@ export const GoalsManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Objetivos Financieros
-        </h1>
+        <h1 className="page-title">Objetivos Financieros</h1>
         <button
           onClick={() => setShowForm(true)}
           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
@@ -186,29 +222,21 @@ export const GoalsManagement = () => {
         </button>
       </div>
 
-      {/* Resumen */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Objetivos Activos</div>
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {activeGoals.length}
-          </div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{activeGoals.length}</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Objetivos Completados</div>
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {completedGoals.length}
-          </div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{completedGoals.length}</div>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total de Objetivos</div>
-          <div className="text-2xl font-bold text-gray-900 dark:text-white">
-            {goals.length}
-          </div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-white">{goals.length}</div>
         </div>
       </div>
 
-      {/* Formulario */}
       {showForm && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
@@ -217,23 +245,19 @@ export const GoalsManagement = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nombre del Objetivo *
-                </label>
+                <label className="label">Nombre del Objetivo *</label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  placeholder="Ej: Comprar casa nueva"
+                  className="input-field"
+                  placeholder="Ej: Vivienda Propia"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Monto Objetivo *
-                </label>
+                <label className="label">Monto Objetivo *</label>
                 <input
                   type="number"
                   required
@@ -241,34 +265,17 @@ export const GoalsManagement = () => {
                   step="0.01"
                   value={formData.targetAmount}
                   onChange={(e) => setFormData({ ...formData, targetAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="input-field"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Monto Actual *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={formData.currentAmount}
-                  onChange={(e) => setFormData({ ...formData, currentAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Moneda *
-                </label>
+                <label className="label">Moneda *</label>
                 <select
                   required
                   value={formData.currency}
                   onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="input-field"
                 >
                   <option value="UYU">Pesos (UYU)</option>
                   <option value="USD">Dólares (USD)</option>
@@ -276,24 +283,82 @@ export const GoalsManagement = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Fecha Límite *
-                </label>
+                <label className="label">Fecha Límite *</label>
                 <input
                   type="date"
                   required
                   value={formData.deadline}
                   onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="input-field"
                 />
+              </div>
+
+              <div>
+                <label className="label">Avance actual (automático)</label>
+                <div className="input-field bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                  {formatCurrency(previewCurrentAmount, formData.currency)}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Calculado desde las cuentas seleccionadas
+                </p>
               </div>
             </div>
 
+            <div>
+              <label className="label">Cuentas vinculadas *</label>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                El avance se calcula automáticamente sumando los saldos de estas cuentas
+              </p>
+              {accounts.length === 0 ? (
+                <p className="text-sm text-orange-600 dark:text-orange-400">
+                  No hay cuentas disponibles. Crea cuentas primero en la sección Cuentas.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                  {accounts.map(account => {
+                    const selected = formData.linkedAccountIds.includes(account.id);
+                    const balanceInGoalCurrency = calculateGoalCurrentAmount(
+                      { currency: formData.currency, linkedAccountIds: [account.id], currentAmount: 0 },
+                      [account]
+                    );
+                    return (
+                      <label
+                        key={account.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-colors ${
+                          selected
+                            ? 'border-primary ring-2 ring-primary/30 ' + getOwnerCardClasses(account.owner, owners)
+                            : getOwnerCardClasses(account.owner, owners)
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleAccount(account.id)}
+                          className="rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {account.name}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {account.bank} ·{' '}
+                            <span className={`inline-flex px-1.5 py-0.5 rounded-full font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
+                              {account.owner}
+                            </span>
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {formatCurrency(balanceInGoalCurrency, formData.currency)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2">
-              <button
-                type="submit"
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-              >
+              <button type="submit" className="btn-primary">
                 {editingId ? 'Actualizar' : 'Guardar'}
               </button>
               <button
@@ -308,7 +373,6 @@ export const GoalsManagement = () => {
         </div>
       )}
 
-      {/* Lista de objetivos */}
       <div className="space-y-4">
         {goals.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
@@ -317,7 +381,7 @@ export const GoalsManagement = () => {
               No hay objetivos financieros
             </h3>
             <p className="text-gray-500 dark:text-gray-400 mb-6">
-              Define tus metas financieras y haz seguimiento de tu progreso hacia ellas
+              Vincula cuentas bancarias y el progreso se calculará automáticamente
             </p>
             <button
               onClick={() => setShowForm(true)}
@@ -328,54 +392,38 @@ export const GoalsManagement = () => {
           </div>
         ) : (
           goals.map((goal) => {
-            const progress = calculateProgress(goal.currentAmount, goal.targetAmount);
+            const linkedAccounts = getLinkedAccounts(goal);
+            const hasLinkedAccounts = linkedAccounts.length > 0;
+            const currentAmount = hasLinkedAccounts
+              ? calculateGoalCurrentAmount(goal, accounts)
+              : goal.currentAmount;
+            const progress = calculateProgress(currentAmount, goal.targetAmount);
             const daysRemaining = getDaysRemaining(goal.deadline);
             const isOverdue = daysRemaining < 0 && goal.status === 'active';
 
             return (
-              <div
-                key={goal.id}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow p-6"
-              >
+              <div key={goal.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        {goal.name}
-                      </h3>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{goal.name}</h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(goal.status)}`}>
                         {getStatusLabel(goal.status)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                      <span>
-                        Meta: {formatCurrency(goal.targetAmount, goal.currency)}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-400">
+                      <span>Meta: {formatCurrency(goal.targetAmount, goal.currency)}</span>
                       <span>•</span>
-                      <span>
-                        Actual: {formatCurrency(goal.currentAmount, goal.currency)}
-                      </span>
+                      <span>Actual: {formatCurrency(currentAmount, goal.currency)}</span>
                       <span>•</span>
                       <span className={isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                        {isOverdue 
+                        {isOverdue
                           ? `Vencido hace ${Math.abs(daysRemaining)} días`
-                          : `${daysRemaining} días restantes`
-                        }
+                          : `${daysRemaining} días restantes`}
                       </span>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {goal.status === 'active' && (
-                      <button
-                        onClick={() => {
-                          setUpdatingProgress(goal.id);
-                          setProgressAmount(goal.currentAmount);
-                        }}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Actualizar
-                      </button>
-                    )}
                     <button
                       onClick={() => handleEdit(goal)}
                       className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
@@ -391,63 +439,58 @@ export const GoalsManagement = () => {
                   </div>
                 </div>
 
-                {/* Barra de progreso */}
                 <div className="mb-4">
                   <div className="flex justify-between text-sm mb-2">
-                    <span className="text-gray-600 dark:text-gray-400">Progreso</span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Progreso {hasLinkedAccounts && '(auto)'}
+                    </span>
                     <span className="font-medium text-gray-900 dark:text-white">{progress}%</span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
                     <div
                       className={`h-3 rounded-full transition-all ${
-                        goal.status === 'completed'
-                          ? 'bg-green-600'
-                          : progress >= 75
-                          ? 'bg-blue-600'
-                          : progress >= 50
-                          ? 'bg-yellow-600'
+                        goal.status === 'completed' ? 'bg-green-600'
+                          : progress >= 75 ? 'bg-blue-600'
+                          : progress >= 50 ? 'bg-yellow-600'
                           : 'bg-red-600'
                       }`}
                       style={{ width: `${progress}%` }}
-                    ></div>
+                    />
                   </div>
                 </div>
 
-                {/* Formulario de actualización de progreso */}
-                {updatingProgress === goal.id && (
-                  <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Nuevo monto actual
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={progressAmount}
-                        onChange={(e) => setProgressAmount(parseFloat(e.target.value) || 0)}
-                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      />
-                      <button
-                        onClick={() => handleUpdateProgress(goal.id)}
-                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-                      >
-                        Guardar
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUpdatingProgress(null);
-                          setProgressAmount(0);
-                        }}
-                        className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        Cancelar
-                      </button>
+                {hasLinkedAccounts ? (
+                  <div className="mb-3">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-2">
+                      Cuentas vinculadas
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {linkedAccounts.map(account => (
+                        <span
+                          key={account.id}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${getOwnerCardClasses(account.owner, owners)}`}
+                        >
+                          {account.type === 'debit' ? '💳' : account.type === 'credit' ? '💰' : '📈'}
+                          {account.name}
+                          <span className="text-gray-500">
+                            ({formatCurrency(
+                              calculateGoalCurrentAmount(
+                                { currency: goal.currency, linkedAccountIds: [account.id], currentAmount: 0 },
+                                [account]
+                              ),
+                              goal.currency
+                            )})
+                          </span>
+                        </span>
+                      ))}
                     </div>
                   </div>
+                ) : (
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mb-3">
+                    ⚠️ Sin cuentas vinculadas — edita el objetivo para calcular el avance automáticamente
+                  </p>
                 )}
 
-                {/* Fecha límite */}
                 <div className="text-sm text-gray-500 dark:text-gray-400">
                   Fecha límite: {new Date(goal.deadline).toLocaleDateString('es-UY', {
                     year: 'numeric',
@@ -460,8 +503,7 @@ export const GoalsManagement = () => {
           })
         )}
       </div>
+      <ModalComponent />
     </div>
   );
 };
-
-// Made with Bob

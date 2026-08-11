@@ -1,48 +1,17 @@
 {
   "rules": {
+    "authorizedUsers": {
+      ".read": "auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true",
+      "$uid": {
+        ".read": "$uid === auth.uid || (auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true)",
+        ".write": "auth != null && (($uid === auth.uid && newData.child('autorizado').val() === false && newData.child('familyRoot').val() === 'family' && (!data.exists() || data.child('autorizado').val() !== true)) || (auth.uid !== $uid && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true && data.exists() && newData.child('uid').val() === data.child('uid').val() && newData.child('familyRoot').val() === root.child('authorizedUsers').child(auth.uid).child('familyRoot').val()))"
+      }
+    },
+    "$familyRoot": {
+      ".read": "auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true && root.child('authorizedUsers').child(auth.uid).child('familyRoot').val() === $familyRoot",
+      ".write": "auth != null && root.child('authorizedUsers').child(auth.uid).child('autorizado').val() === true && root.child('authorizedUsers').child(auth.uid).child('familyRoot').val() === $familyRoot"
+    },
     "users": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "accounts": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "transactions": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "uploadHistory": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "categories": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "assets": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "goals": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "rules": {
       "$uid": {
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid"

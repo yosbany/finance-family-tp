@@ -1,18 +1,19 @@
 import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
+import { familyPath } from './familyPaths';
 import { Asset } from '../types';
 
-export const createAsset = async (userId: string, asset: Omit<Asset, 'id'>): Promise<string> => {
+export const createAsset = async (asset: Omit<Asset, 'id'>): Promise<string> => {
   try {
-    const assetsRef = ref(database, `assets/${userId}`);
+    const assetsRef = ref(database, familyPath('assets'));
     const newAssetRef = push(assetsRef);
     const assetId = newAssetRef.key!;
-    
+
     const assetData: Asset = {
       ...asset,
       id: assetId
     };
-    
+
     await set(newAssetRef, assetData);
     return assetId;
   } catch (error) {
@@ -21,15 +22,15 @@ export const createAsset = async (userId: string, asset: Omit<Asset, 'id'>): Pro
   }
 };
 
-export const getAssets = async (userId: string): Promise<Asset[]> => {
+export const getAssets = async (): Promise<Asset[]> => {
   try {
-    const assetsRef = ref(database, `assets/${userId}`);
+    const assetsRef = ref(database, familyPath('assets'));
     const snapshot = await get(assetsRef);
-    
+
     if (!snapshot.exists()) {
       return [];
     }
-    
+
     const assetsData = snapshot.val();
     return Object.values(assetsData) as Asset[];
   } catch (error) {
@@ -38,15 +39,15 @@ export const getAssets = async (userId: string): Promise<Asset[]> => {
   }
 };
 
-export const getAssetById = async (userId: string, assetId: string): Promise<Asset | null> => {
+export const getAssetById = async (assetId: string): Promise<Asset | null> => {
   try {
-    const assetRef = ref(database, `assets/${userId}/${assetId}`);
+    const assetRef = ref(database, familyPath('assets', assetId));
     const snapshot = await get(assetRef);
-    
+
     if (!snapshot.exists()) {
       return null;
     }
-    
+
     return snapshot.val() as Asset;
   } catch (error) {
     console.error('Error al obtener activo:', error);
@@ -54,13 +55,9 @@ export const getAssetById = async (userId: string, assetId: string): Promise<Ass
   }
 };
 
-export const updateAsset = async (
-  userId: string,
-  assetId: string,
-  updates: Partial<Asset>
-): Promise<void> => {
+export const updateAsset = async (assetId: string, updates: Partial<Asset>): Promise<void> => {
   try {
-    const assetRef = ref(database, `assets/${userId}/${assetId}`);
+    const assetRef = ref(database, familyPath('assets', assetId));
     await update(assetRef, updates);
   } catch (error) {
     console.error('Error al actualizar activo:', error);
@@ -68,9 +65,9 @@ export const updateAsset = async (
   }
 };
 
-export const deleteAsset = async (userId: string, assetId: string): Promise<void> => {
+export const deleteAsset = async (assetId: string): Promise<void> => {
   try {
-    const assetRef = ref(database, `assets/${userId}/${assetId}`);
+    const assetRef = ref(database, familyPath('assets', assetId));
     await remove(assetRef);
   } catch (error) {
     console.error('Error al eliminar activo:', error);
@@ -78,9 +75,9 @@ export const deleteAsset = async (userId: string, assetId: string): Promise<void
   }
 };
 
-export const getTotalAssetValue = async (userId: string, currency: 'UYU' | 'USD'): Promise<number> => {
+export const getTotalAssetValue = async (currency: 'UYU' | 'USD'): Promise<number> => {
   try {
-    const assets = await getAssets(userId);
+    const assets = await getAssets();
     return assets
       .filter(asset => asset.currency === currency)
       .reduce((total, asset) => total + asset.value, 0);
@@ -90,8 +87,7 @@ export const getTotalAssetValue = async (userId: string, currency: 'UYU' | 'USD'
   }
 };
 
-// Inicializar activos predeterminados
-export const initializeDefaultAssets = async (userId: string): Promise<void> => {
+export const initializeDefaultAssets = async (): Promise<void> => {
   try {
     const defaultAssets = [
       {
@@ -102,7 +98,7 @@ export const initializeDefaultAssets = async (userId: string): Promise<void> => 
         purchaseDate: Date.now(),
         description: "Propiedad familiar en La Habana, Cuba",
         location: "La Habana, Cuba",
-        images: []
+        images: [] as string[]
       },
       {
         name: "Automóvil",
@@ -112,17 +108,15 @@ export const initializeDefaultAssets = async (userId: string): Promise<void> => 
         purchaseDate: Date.now(),
         description: "Vehículo familiar",
         location: "Uruguay",
-        images: []
+        images: [] as string[]
       }
     ];
-    
+
     for (const asset of defaultAssets) {
-      await createAsset(userId, asset);
+      await createAsset(asset);
     }
   } catch (error) {
     console.error('Error al inicializar activos predeterminados:', error);
     throw error;
   }
 };
-
-// Made with Bob

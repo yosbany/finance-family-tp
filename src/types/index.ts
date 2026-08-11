@@ -4,7 +4,7 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 export type TransactionStatus = 'pending' | 'classified' | 'verified';
 export type AssetType = 'property' | 'vehicle' | 'investment' | 'other';
 export type GoalStatus = 'active' | 'completed' | 'cancelled';
-export type UploadStatus = 'processed' | 'error';
+export type UploadStatus = 'processed' | 'error' | 'no_movements';
 
 export interface User {
   uid: string;
@@ -85,6 +85,7 @@ export interface Goal {
   deadline: number;
   status: GoalStatus;
   createdAt: number;
+  linkedAccountIds: string[];
 }
 
 export interface Rule {

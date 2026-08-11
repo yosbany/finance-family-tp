@@ -8,6 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { Modal } from '../common/Modal';
 import BankLogo from '../common/BankLogo';
+import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 
 export const AccountsManagement = () => {
   const { user } = useAuth();
@@ -82,19 +83,19 @@ export const AccountsManagement = () => {
     try {
       setLoading(true);
       const [accountsData, ownersData] = await Promise.all([
-        getAccounts(user.uid),
-        getOwners(user.uid)
+        getAccounts(),
+        getOwners()
       ]);
       
       // Si no hay propietarios, inicializar
       if (ownersData.length === 0) {
         setInitializing(true);
-        await initializeDefaultOwners(user.uid);
-        const newOwners = await getOwners(user.uid);
+        await initializeDefaultOwners();
+        const newOwners = await getOwners();
         setOwners(newOwners);
         
         // Migrar cuentas de "Ambos" a "Núcleo"
-        const migratedCount = await migrateAmbosToNucleo(user.uid);
+        const migratedCount = await migrateAmbosToNucleo();
         if (migratedCount > 0) {
           console.log(`✅ Migradas ${migratedCount} cuentas de "Ambos" a "Núcleo"`);
         }
@@ -104,16 +105,16 @@ export const AccountsManagement = () => {
       
       // Si no hay cuentas, inicializar datos predeterminados
       if (accountsData.length === 0) {
-        await initializeDefaultAccounts(user.uid);
-        await initializeDefaultCategories(user.uid);
-        const newAccounts = await getAccounts(user.uid);
+        await initializeDefaultAccounts();
+        await initializeDefaultCategories();
+        const newAccounts = await getAccounts();
         setAccounts(newAccounts);
         setInitializing(false);
         
         // Cargar conteo de transacciones categorizadas
         const counts: Record<string, number> = {};
         for (const account of newAccounts) {
-          const txs = await getTransactionsByAccount(user.uid, account.id);
+          const txs = await getTransactionsByAccount(account.id);
           const categorizedTxs = txs.filter(tx => tx.category && tx.category !== '');
           counts[account.id] = categorizedTxs.length;
         }
@@ -124,7 +125,7 @@ export const AccountsManagement = () => {
         // Cargar conteo de transacciones categorizadas por cuenta
         const counts: Record<string, number> = {};
         for (const account of accountsData) {
-          const txs = await getTransactionsByAccount(user.uid, account.id);
+          const txs = await getTransactionsByAccount(account.id);
           const categorizedTxs = txs.filter(tx => tx.category && tx.category !== '');
           counts[account.id] = categorizedTxs.length;
         }
@@ -167,10 +168,10 @@ export const AccountsManagement = () => {
         updates.creditLimit = editCreditLimit;
       }
 
-      await updateAccount(user.uid, accountId, updates);
+      await updateAccount(accountId, updates);
       
       // Recalcular balance después de actualizar el balance inicial
-      await recalculateAllAccountBalances(user.uid);
+      await recalculateAllAccountBalances();
       
       await loadAccounts();
       setEditingId(null);
@@ -197,14 +198,14 @@ export const AccountsManagement = () => {
     if (!user || !newOwnerName.trim()) return;
 
     try {
-      await createOwner(user.uid, {
+      await createOwner({
         name: newOwnerName.trim(),
         isCore: false,
         color: newOwnerColor,
         createdAt: Date.now()
       });
       
-      const updatedOwners = await getOwners(user.uid);
+      const updatedOwners = await getOwners();
       setOwners(updatedOwners);
       setNewOwnerName('');
       setNewOwnerColor('blue');
@@ -221,8 +222,8 @@ export const AccountsManagement = () => {
     if (!user) return;
 
     try {
-      await deleteOwner(user.uid, ownerId);
-      const updatedOwners = await getOwners(user.uid);
+      await deleteOwner(ownerId);
+      const updatedOwners = await getOwners();
       setOwners(updatedOwners);
       setModalMessage(`Propietario "${ownerName}" eliminado exitosamente`);
       setShowSuccessModal(true);
@@ -263,7 +264,7 @@ export const AccountsManagement = () => {
         Object.assign(newAccount, { creditLimit: newAccountCreditLimit });
       }
 
-      await createAccount(user.uid, newAccount);
+      await createAccount(newAccount);
       await loadAccounts();
       
       // Resetear formulario
@@ -294,7 +295,7 @@ export const AccountsManagement = () => {
 
     try {
       setRecalculating(true);
-      await recalculateAllAccountBalances(user.uid);
+      await recalculateAllAccountBalances();
       await loadAccounts();
       setModalMessage('Balances recalculados exitosamente');
       setShowSuccessModal(true);
@@ -332,23 +333,6 @@ export const AccountsManagement = () => {
       investment: '📈'
     };
     return icons[type as keyof typeof icons] || '💳';
-  };
-
-  const getOwnerColor = (ownerName: string) => {
-    const owner = owners.find(o => o.name === ownerName);
-    if (!owner) return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-    
-    const colorClasses: Record<string, string> = {
-      blue: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-      pink: 'bg-pink-100 text-pink-800 dark:bg-pink-900/20 dark:text-pink-400',
-      purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
-      green: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-      yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-      red: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
-      gray: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-    };
-    
-    return colorClasses[owner.color] || colorClasses.gray;
   };
 
   // Calcular totales por propietario
@@ -393,7 +377,7 @@ export const AccountsManagement = () => {
     <>
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title">
           Cuentas Bancarias
         </h1>
         <div className="flex items-center gap-4">
@@ -436,7 +420,7 @@ export const AccountsManagement = () => {
         {Object.entries(totalsByOwner).map(([owner, totals]) => (
           <div key={owner} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-3">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOwnerColor(owner)}`}>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOwnerBadgeClasses(owner, owners)}`}>
                 {owner}
               </span>
             </div>
@@ -490,7 +474,7 @@ export const AccountsManagement = () => {
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
                 {bankAccounts.map((account) => (
-                  <div key={account.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  <div key={account.id} className={`p-6 transition-colors border-l-4 ${getOwnerCardClasses(account.owner, owners)}`}>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
@@ -502,7 +486,7 @@ export const AccountsManagement = () => {
                               <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
                                 {getAccountTypeLabel(account.type)}
                               </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${getOwnerColor(account.owner)}`}>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${getOwnerBadgeClasses(account.owner, owners)}`}>
                                 {account.owner}
                               </span>
                               <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -774,7 +758,7 @@ export const AccountsManagement = () => {
                   className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
                 >
                   <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOwnerColor(owner.name)}`}>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${getOwnerBadgeClasses(owner.name, owners)}`}>
                       {owner.name}
                     </span>
                     {owner.isCore && (

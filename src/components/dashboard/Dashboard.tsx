@@ -8,6 +8,7 @@ import { getTransactions } from '../../services/transactions.service';
 import { Account, Transaction } from '../../types';
 import { calculateKPIs } from '../../utils/calculations';
 import { formatCurrency } from '../../utils/calculations';
+import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { KPICard } from './KPICard';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
@@ -32,16 +33,16 @@ export const Dashboard = () => {
     try {
       setLoading(true);
       const [accountsData, transactionsData] = await Promise.all([
-        getAccounts(user.uid),
-        getTransactions(user.uid)
+        getAccounts(),
+        getTransactions()
       ]);
       
       // Si no hay cuentas, inicializar datos predeterminados
       if (accountsData.length === 0) {
         setInitializing(true);
-        await initializeDefaultAccounts(user.uid);
-        await initializeDefaultCategories(user.uid);
-        const newAccounts = await getAccounts(user.uid);
+        await initializeDefaultAccounts();
+        await initializeDefaultCategories();
+        const newAccounts = await getAccounts();
         setAccounts(newAccounts);
         setInitializing(false);
       } else {
@@ -110,10 +111,10 @@ export const Dashboard = () => {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title-lg">
           Dashboard
         </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
+        <p className="page-subtitle">
           Resumen de tus finanzas familiares
         </p>
       </div>
@@ -172,7 +173,7 @@ export const Dashboard = () => {
             accounts.slice(0, 5).map((account) => (
               <div
                 key={account.id}
-                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                className={`flex items-center justify-between p-3 rounded-lg border ${getOwnerCardClasses(account.owner)}`}
               >
                 <div className="flex items-center gap-3">
                   <BankLogo bank={account.bank} size="sm" />
@@ -180,9 +181,14 @@ export const Dashboard = () => {
                     <p className="font-medium text-gray-900 dark:text-white">
                       {account.name}
                     </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {account.bank} • {account.owner}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {account.bank}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeClasses(account.owner)}`}>
+                        {account.owner}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="text-right">

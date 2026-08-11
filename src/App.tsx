@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { UnauthorizedPage } from './components/auth/UnauthorizedPage';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { UploadStatements } from './components/transactions/UploadStatements';
@@ -10,10 +11,11 @@ import { AssetManagement } from './components/assets/AssetManagement';
 import { GoalsManagement } from './components/goals/GoalsManagement';
 import { AccountsManagement } from './components/accounts/AccountsManagement';
 import { CategoriesManagement } from './components/categories/CategoriesManagement';
-import { useAuth } from './hooks/useAuth';
+import { MembersManagement } from './components/members/MembersManagement';
+import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, isAuthorized, loading } = useAuthorization();
 
   if (loading) {
     return (
@@ -27,12 +29,17 @@ function App() {
   }
 
   return (
-    <BrowserRouter basename="/finance-family-tp">
+    <BrowserRouter basename="/finance-family">
       <Routes>
         <Route
           path="/login"
-          element={user ? <Navigate to="/" replace /> : <LoginPage />}
+          element={
+            user
+              ? (isAuthorized ? <Navigate to="/" replace /> : <Navigate to="/unauthorized" replace />)
+              : <LoginPage />
+          }
         />
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route
           path="/"
           element={
@@ -113,7 +120,17 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="/members"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <MembersManagement />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to={user ? (isAuthorized ? '/' : '/unauthorized') : '/login'} replace />} />
       </Routes>
     </BrowserRouter>
   );

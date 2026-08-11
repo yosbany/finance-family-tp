@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { path: '/assets', label: 'Patrimonio', icon: '💎' },
   { path: '/goals', label: 'Objetivos', icon: '🎯' },
   { path: '/reports', label: 'Reportes', icon: '📈' },
+  { path: '/members', label: 'Miembros', icon: '👥' },
 ];
 
 export const Sidebar = () => {
@@ -92,7 +93,7 @@ export const Sidebar = () => {
         <div className="absolute bottom-4 left-0 right-0 px-4">
           <div className="bg-gray-700/30 dark:bg-gray-800/30 rounded-lg p-3 border border-gray-600/30 dark:border-gray-700/30">
             <p className="text-xs text-gray-400 text-center">
-              💰 Finanzas Familiares
+              💰 Finance Family
             </p>
             <p className="text-xs text-gray-500 text-center mt-1">
               v1.0.0

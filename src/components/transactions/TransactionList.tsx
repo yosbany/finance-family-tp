@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   getTransactions,
   updateTransaction
@@ -7,18 +8,27 @@ import { getAccounts } from '../../services/accounts.service';
 import {
   getCategories,
   addKeywordsToCategory,
-  ensureTransferCategory
+  ensureTransferCategory,
+  ensureReingresoIvaCategory
 } from '../../services/categories.service';
-import { Transaction, Account, Category } from '../../types';
+import { getUploadHistory } from '../../services/uploadHistory.service';
+import { Transaction, Account, Category, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
-import { learnFromManualClassification, categorizeTransaction } from '../../utils/categorization';
+import { useModal } from '../../hooks/useModal';
+import { TransactionCategorizeModal } from './TransactionCategorizeModal';
+import { categorizeTransaction } from '../../utils/categorization';
+import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
 export const TransactionList = () => {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const uploadIdFilter = searchParams.get('uploadId');
+  const { showSuccess, showError, showInfo, ModalComponent } = useModal();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [uploadInfo, setUploadInfo] = useState<UploadHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recategorizing, setRecategorizing] = useState(false);
@@ -33,19 +43,24 @@ export const TransactionList = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   
-  // Edición
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editCategory, setEditCategory] = useState('');
-  
-  // Crear regla automática
-  const [showRuleDialog, setShowRuleDialog] = useState(false);
-  const [suggestedKeywords, setSuggestedKeywords] = useState<string[]>([]);
-  const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
-  const [currentTransaction, setCurrentTransaction] = useState<Transaction | null>(null);
+  // Modal de categorización
+  const [showCategorizeModal, setShowCategorizeModal] = useState(false);
+  const [modalTransaction, setModalTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !uploadIdFilter) {
+      setUploadInfo(null);
+      return;
+    }
+
+    getUploadHistory().then(history => {
+      setUploadInfo(history.find(u => u.id === uploadIdFilter) ?? null);
+    });
+  }, [user, uploadIdFilter]);
 
   const loadData = async () => {
     if (!user) {
@@ -57,12 +72,13 @@ export const TransactionList = () => {
       setLoading(true);
       
       // Asegurar que existe la categoría de Transferencias Internas
-      await ensureTransferCategory(user.uid);
+      await ensureTransferCategory();
+      await ensureReingresoIvaCategory();
       
       const [txs, accs, cats] = await Promise.all([
-        getTransactions(user.uid),
-        getAccounts(user.uid),
-        getCategories(user.uid)
+        getTransactions(),
+        getAccounts(),
+        getCategories()
       ]);
       setTransactions(txs);
       setAccounts(accs);
@@ -78,95 +94,49 @@ export const TransactionList = () => {
     }
   };
 
-  const handleEdit = (transaction: Transaction) => {
-    setEditingId(transaction.id);
-    setEditCategory(transaction.category || '');
+  const openCategorizeModal = (transaction: Transaction) => {
+    setModalTransaction(transaction);
+    setShowCategorizeModal(true);
   };
 
-  const handleSave = async (transactionId: string) => {
-    if (!user) return;
-    
-    try {
-      const transaction = transactions.find(tx => tx.id === transactionId);
-      if (!transaction) return;
+  const closeCategorizeModal = () => {
+    setShowCategorizeModal(false);
+    setModalTransaction(null);
+  };
 
-      await updateTransaction(user.uid, transactionId, {
-        category: editCategory,
-        status: 'classified'
+  const handleModalSave = async (categoryId: string, keywords: string[]) => {
+    if (!user || !modalTransaction) return;
+
+    try {
+      await updateTransaction(modalTransaction.id, {
+        category: categoryId,
+        status: 'classified',
       });
-      
-      // Actualizar localmente
-      const updatedTransaction = {
-        ...transaction,
-        category: editCategory,
-        status: 'classified' as const
-      };
-      
-      setTransactions(prev => prev.map(tx =>
-        tx.id === transactionId ? updatedTransaction : tx
-      ));
-      
-      setEditingId(null);
 
-      // Si la transacción estaba pendiente, ofrecer crear regla automática
-      if (transaction.status === 'pending') {
-        const category = categories.find(c => c.id === editCategory);
-        if (category) {
-          const keywords = learnFromManualClassification(updatedTransaction, category);
-          if (keywords.length > 0) {
-            setCurrentTransaction(updatedTransaction);
-            setSuggestedKeywords(keywords);
-            setSelectedKeywords(keywords);
-            setShowRuleDialog(true);
-          }
-        }
+      if (keywords.length > 0) {
+        await addKeywordsToCategory(categoryId, keywords);
+        const updatedCategories = await getCategories();
+        setCategories(updatedCategories);
       }
+
+      setTransactions(prev =>
+        prev.map(tx =>
+          tx.id === modalTransaction.id
+            ? { ...tx, category: categoryId, status: 'classified' as const }
+            : tx
+        )
+      );
+
+      showSuccess(
+        keywords.length > 0
+          ? 'Transacción categorizada y regla de autoclasificación creada'
+          : 'Transacción categorizada correctamente'
+      );
     } catch (err) {
-      console.error('Error al actualizar transacción:', err);
-      alert('Error al guardar los cambios');
+      console.error('Error al categorizar transacción:', err);
+      showError('Error al guardar los cambios');
+      throw err;
     }
-  };
-
-  const handleCreateRule = async () => {
-    if (!user || !currentTransaction || selectedKeywords.length === 0) return;
-
-    try {
-      await addKeywordsToCategory(user.uid, currentTransaction.category!, selectedKeywords);
-      
-      // Recargar categorías
-      const updatedCategories = await getCategories(user.uid);
-      setCategories(updatedCategories);
-      
-      setShowRuleDialog(false);
-      setCurrentTransaction(null);
-      setSuggestedKeywords([]);
-      setSelectedKeywords([]);
-      
-      alert('✅ Regla de categorización creada exitosamente');
-    } catch (err) {
-      console.error('Error al crear regla:', err);
-      alert('Error al crear la regla de categorización');
-    }
-  };
-
-  const handleSkipRule = () => {
-    setShowRuleDialog(false);
-    setCurrentTransaction(null);
-    setSuggestedKeywords([]);
-    setSelectedKeywords([]);
-  };
-
-  const toggleKeyword = (keyword: string) => {
-    setSelectedKeywords(prev =>
-      prev.includes(keyword)
-        ? prev.filter(k => k !== keyword)
-        : [...prev, keyword]
-    );
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditCategory('');
   };
 
   const handleRecategorizeAll = async () => {
@@ -193,19 +163,19 @@ export const TransactionList = () => {
           }
           
           // Actualizar la transacción en Firebase
-          await updateTransaction(user.uid, transaction.id, updates);
+          await updateTransaction(transaction.id, updates);
           categorizedCount++;
         }
       }
 
       // Recargar transacciones
-      const updatedTransactions = await getTransactions(user.uid);
+      const updatedTransactions = await getTransactions();
       setTransactions(updatedTransactions);
       
       if (categorizedCount > 0) {
-        alert(`✅ Se categorizaron automáticamente ${categorizedCount} de ${sortedPending.length} transacciones`);
+        showSuccess(`Se categorizaron automáticamente ${categorizedCount} de ${sortedPending.length} transacciones`);
       } else {
-        alert('ℹ️ No se encontraron coincidencias con las reglas actuales. Considera agregar más palabras clave a las categorías.');
+        showInfo('No se encontraron coincidencias con las reglas actuales. Considera agregar más palabras clave a las categorías.');
       }
     } catch (err) {
       console.error('Error al re-categorizar:', err);
@@ -217,6 +187,8 @@ export const TransactionList = () => {
 
   // Filtrar transacciones
   const filteredTransactions = transactions.filter(tx => {
+    if (uploadIdFilter && tx.uploadId !== uploadIdFilter) return false;
+
     // Búsqueda general en todas las columnas
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -268,17 +240,7 @@ export const TransactionList = () => {
     return account ? `${account.name} ${account.owner}` : 'Desconocida';
   };
 
-  const getOwnerBadgeColor = (owner: string) => {
-    const ownerLower = owner.toLowerCase();
-    if (ownerLower.includes('yosba') || ownerLower.includes('yosb')) {
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-    } else if (ownerLower.includes('yane')) {
-      return 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300';
-    } else if (ownerLower.includes('ambos') || ownerLower.includes('familia')) {
-      return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
-    }
-    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-  };
+  const getOwnerBadgeColor = (owner: string) => getOwnerBadgeClasses(owner);
 
   const getCategoryName = (categoryId: string) => {
     return categories.find(c => c.id === categoryId)?.name || 'Sin categoría';
@@ -295,6 +257,66 @@ export const TransactionList = () => {
     }).format(amount);
   };
 
+  const renderTransactionRow = (transaction: Transaction) => (
+    <tr
+      key={transaction.id}
+      onDoubleClick={() => openCategorizeModal(transaction)}
+      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+      title="Doble clic para categorizar"
+    >
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+        {new Date(transaction.date).toLocaleDateString('es-UY')}
+      </td>
+      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+        {transaction.description}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm">
+        {(() => {
+          const account = getAccount(transaction.accountId);
+          if (!account) return <span className="text-gray-600 dark:text-gray-400">Desconocida</span>;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="text-gray-900 dark:text-white">{account.name}</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeColor(account.owner)}`}>
+                {account.owner}
+              </span>
+            </div>
+          );
+        })()}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm">
+        <span
+          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+          style={{
+            backgroundColor: `${getCategoryColor(transaction.category || '')}20`,
+            color: getCategoryColor(transaction.category || '')
+          }}
+        >
+          {getCategoryName(transaction.category || '')}
+        </span>
+      </td>
+      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
+        transaction.type === 'income'
+          ? 'text-green-600 dark:text-green-400'
+          : 'text-red-600 dark:text-red-400'
+      }`}>
+        {transaction.type === 'income' ? '+' : '-'}
+        {formatAmount(Math.abs(transaction.amount), transaction.currency)}
+      </td>
+    </tr>
+  );
+
+  const uploadAccount = uploadInfo
+    ? accounts.find(a => a.id === uploadInfo.accountId)
+    : null;
+
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  const clearUploadFilter = () => setSearchParams({});
+
   if (loading) return <LoadingSpinner />;
 
   if (error) {
@@ -308,7 +330,7 @@ export const TransactionList = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title">
           Transacciones
         </h1>
         <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -320,6 +342,31 @@ export const TransactionList = () => {
           )}
         </div>
       </div>
+
+      {uploadIdFilter && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
+              📄 Extracto: {uploadAccount ? `${uploadAccount.bank} · ${uploadAccount.name}` : 'Cargando...'}
+              {uploadInfo && (
+                <span className="font-normal text-blue-700 dark:text-blue-300">
+                  {' '}— {monthNames[uploadInfo.statementMonth - 1]} {uploadInfo.statementYear}
+                  {uploadInfo.fileName && ` · ${uploadInfo.fileName}`}
+                </span>
+              )}
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+              Mostrando {filteredTransactions.length} transacción{filteredTransactions.length !== 1 ? 'es' : ''} de este extracto
+            </p>
+          </div>
+          <button
+            onClick={clearUploadFilter}
+            className="px-4 py-2 text-sm bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors whitespace-nowrap"
+          >
+            Ver todas las transacciones
+          </button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -483,7 +530,7 @@ export const TransactionList = () => {
                   </span>
                 </h2>
                 <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                  Estas transacciones necesitan ser categorizadas manualmente
+                  Doble clic en una fila para categorizar y crear reglas de autoclasificación
                 </p>
               </div>
               <button
@@ -526,94 +573,10 @@ export const TransactionList = () => {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Monto
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Acciones
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedPending.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {new Date(transaction.date).toLocaleDateString('es-UY')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {transaction.description}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(() => {
-                        const account = getAccount(transaction.accountId);
-                        if (!account) return <span className="text-gray-600 dark:text-gray-400">Desconocida</span>;
-                        return (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-900 dark:text-white">{account.name}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeColor(account.owner)}`}>
-                              {account.owner}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {editingId === transaction.id ? (
-                        <select
-                          value={editCategory}
-                          onChange={(e) => setEditCategory(e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        >
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                          style={{
-                            backgroundColor: `${getCategoryColor(transaction.category || '')}20`,
-                            color: getCategoryColor(transaction.category || '')
-                          }}
-                        >
-                          {getCategoryName(transaction.category || '')}
-                        </span>
-                      )}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
-                      transaction.type === 'income' 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {transaction.type === 'income' ? '+' : '-'}
-                      {formatAmount(Math.abs(transaction.amount), transaction.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {editingId === transaction.id ? (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleSave(transaction.id)}
-                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                          >
-                            Guardar
-                          </button>
-                          <button
-                            onClick={handleCancel}
-                            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleEdit(transaction)}
-                          className="text-primary hover:text-primary-dark dark:text-primary-light dark:hover:text-primary font-medium"
-                        >
-                          ✏️ Categorizar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {sortedPending.map(renderTransactionRow)}
               </tbody>
             </table>
           </div>
@@ -630,6 +593,9 @@ export const TransactionList = () => {
                 {sortedCategorized.length}
               </span>
             </h2>
+            <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+              Doble clic en una fila para editar la categoría o reglas
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -650,94 +616,10 @@ export const TransactionList = () => {
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Monto
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Acciones
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedCategorized.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {new Date(transaction.date).toLocaleDateString('es-UY')}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {transaction.description}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(() => {
-                        const account = getAccount(transaction.accountId);
-                        if (!account) return <span className="text-gray-600 dark:text-gray-400">Desconocida</span>;
-                        return (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-900 dark:text-white">{account.name}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeColor(account.owner)}`}>
-                              {account.owner}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {editingId === transaction.id ? (
-                        <select
-                          value={editCategory}
-                          onChange={(e) => setEditCategory(e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        >
-                          {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                          style={{
-                            backgroundColor: `${getCategoryColor(transaction.category || '')}20`,
-                            color: getCategoryColor(transaction.category || '')
-                          }}
-                        >
-                          {getCategoryName(transaction.category || '')}
-                        </span>
-                      )}
-                    </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
-                      transaction.type === 'income'
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-red-600 dark:text-red-400'
-                    }`}>
-                      {transaction.type === 'income' ? '+' : '-'}
-                      {formatAmount(Math.abs(transaction.amount), transaction.currency)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {editingId === transaction.id ? (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleSave(transaction.id)}
-                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                          >
-                            Guardar
-                          </button>
-                          <button
-                            onClick={handleCancel}
-                            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleEdit(transaction)}
-                          className="text-primary hover:text-primary-dark dark:text-primary-light dark:hover:text-primary font-medium"
-                        >
-                          ✏️ Categorizar
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {sortedCategorized.map(renderTransactionRow)}
               </tbody>
             </table>
           </div>
@@ -767,79 +649,17 @@ export const TransactionList = () => {
         </div>
       )}
 
-      {/* Modal para crear regla de categorización */}
-      {showRuleDialog && currentTransaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                🤖 Crear Regla de Categorización Automática
-              </h3>
-              
-              <div className="mb-6">
-                <p className="text-gray-600 dark:text-gray-400 mb-2">
-                  Has clasificado manualmente esta transacción:
-                </p>
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {currentTransaction.description}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Categoría: {getCategoryName(currentTransaction.category || '')}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <p className="text-gray-900 dark:text-white font-medium mb-3">
-                  💡 Palabras clave sugeridas para categorización automática:
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  Selecciona las palabras que quieres usar para identificar automáticamente transacciones similares en el futuro:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestedKeywords.map(keyword => (
-                    <button
-                      key={keyword}
-                      onClick={() => toggleKeyword(keyword)}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                        selectedKeywords.includes(keyword)
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {selectedKeywords.includes(keyword) ? '✓ ' : ''}{keyword}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>ℹ️ Nota:</strong> Las palabras seleccionadas se agregarán a las reglas de categorización.
-                  Las futuras transacciones que contengan estas palabras se categorizarán automáticamente como "{getCategoryName(currentTransaction.category || '')}".
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCreateRule}
-                  disabled={selectedKeywords.length === 0}
-                  className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  ✅ Crear Regla ({selectedKeywords.length} palabra{selectedKeywords.length !== 1 ? 's' : ''})
-                </button>
-                <button
-                  onClick={handleSkipRule}
-                  className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  ⏭️ Omitir
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransactionCategorizeModal
+        transaction={modalTransaction}
+        accounts={accounts}
+        categories={categories}
+        isOpen={showCategorizeModal}
+        onClose={closeCategorizeModal}
+        onSave={handleModalSave}
+        getCategoryName={getCategoryName}
+        getCategoryColor={getCategoryColor}
+      />
+      <ModalComponent />
     </div>
   );
 };

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory } from '../../services/categories.service';
+import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory, ensureReingresoIvaCategory } from '../../services/categories.service';
 import { getTransactions } from '../../services/transactions.service';
 import { Category, Transaction } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
+import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 
 export const CategoriesManagement = () => {
   const { user } = useAuth();
+  const { showError, showWarning, showConfirm, ModalComponent } = useModal();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,13 +42,14 @@ export const CategoriesManagement = () => {
       setLoading(true);
       
       // Asegurar que existe la categoría de Transferencias Internas
-      await ensureTransferCategory(user.uid);
+      await ensureTransferCategory();
+      await ensureReingresoIvaCategory();
       
-      const data = await getCategories(user.uid);
+      const data = await getCategories();
       setCategories(data);
 
       // Cargar conteo de transacciones por categoría
-      const transactions = await getTransactions(user.uid);
+      const transactions = await getTransactions();
       const counts: Record<string, number> = {};
       data.forEach(cat => {
         counts[cat.id] = transactions.filter(t => t.category === cat.id).length;
@@ -80,13 +83,13 @@ export const CategoriesManagement = () => {
         keywords: editKeywords
       };
 
-      await updateCategory(user.uid, categoryId, updates);
+      await updateCategory(categoryId, updates);
       await loadCategories();
       setEditingId(null);
       setNewKeyword('');
     } catch (err) {
       console.error('Error al actualizar categoría:', err);
-      alert('Error al guardar los cambios');
+      showError('Error al guardar los cambios');
     }
   };
 
@@ -115,7 +118,7 @@ export const CategoriesManagement = () => {
     if (!user || !newCategory.name.trim()) return;
 
     try {
-      await createCategory(user.uid, newCategory);
+      await createCategory(newCategory);
       await loadCategories();
       setShowAddForm(false);
       setNewCategory({
@@ -128,30 +131,33 @@ export const CategoriesManagement = () => {
       });
     } catch (err) {
       console.error('Error al crear categoría:', err);
-      alert('Error al crear la categoría');
+      showError('Error al crear la categoría');
     }
   };
 
-  const handleDelete = async (categoryId: string) => {
+  const handleDelete = (categoryId: string) => {
     if (!user) return;
 
     const count = transactionCounts[categoryId] || 0;
     if (count > 0) {
-      alert(`No se puede eliminar esta categoría porque tiene ${count} transacciones asociadas.`);
+      showWarning(`No se puede eliminar esta categoría porque tiene ${count} transacciones asociadas.`);
       return;
     }
 
-    if (!confirm('¿Estás seguro de que deseas eliminar esta categoría?')) {
-      return;
-    }
-
-    try {
-      await deleteCategory(user.uid, categoryId);
-      await loadCategories();
-    } catch (err) {
-      console.error('Error al eliminar categoría:', err);
-      alert('Error al eliminar la categoría');
-    }
+    showConfirm({
+      title: 'Confirmar eliminación',
+      message: '¿Estás seguro de que deseas eliminar esta categoría?',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteCategory(categoryId);
+          await loadCategories();
+        } catch (err) {
+          console.error('Error al eliminar categoría:', err);
+          showError('Error al eliminar la categoría');
+        }
+      },
+    });
   };
 
   const getCategoryTypeLabel = (type: string) => {
@@ -179,7 +185,7 @@ export const CategoriesManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title">
           Categorías
         </h1>
         <button
@@ -666,6 +672,7 @@ export const CategoriesManagement = () => {
           </button>
         </div>
       )}
+      <ModalComponent />
     </div>
   );
 };

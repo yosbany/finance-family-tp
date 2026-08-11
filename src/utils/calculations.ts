@@ -1,4 +1,4 @@
-import { Account, Transaction, Asset, KPIData } from '../types';
+import { Account, Transaction, Asset, KPIData, Currency } from '../types';
 
 /**
  * Calcula el balance total por moneda
@@ -227,6 +227,32 @@ export const convertCurrency = (
   if (from === to) return amount;
   if (from === 'USD') return amount * exchangeRate;
   return amount / exchangeRate;
+};
+
+/**
+ * Calcula el monto actual de un objetivo según los saldos de las cuentas vinculadas
+ */
+export const calculateGoalCurrentAmount = (
+  goal: { currency: Currency; linkedAccountIds?: string[]; currentAmount: number },
+  accounts: Account[],
+  exchangeRate: number = 40
+): number => {
+  if (!goal.linkedAccountIds?.length) {
+    return goal.currentAmount;
+  }
+
+  const total = goal.linkedAccountIds.reduce((sum, accountId) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return sum;
+
+    const value = account.type === 'credit'
+      ? -Math.abs(account.balance)
+      : account.balance;
+
+    return sum + convertCurrency(value, account.currency, goal.currency, exchangeRate);
+  }, 0);
+
+  return Math.round(total * 100) / 100;
 };
 
 // Made with Bob

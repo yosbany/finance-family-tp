@@ -8,6 +8,8 @@ import {
 import { ref, set, get } from 'firebase/database';
 import { auth, database } from './firebase';
 import { User } from '../types';
+import { registerAccessRequest } from './authorization.service';
+import { resetFamilyRoot } from './familyPaths';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -29,7 +31,13 @@ export const signInWithGoogle = async (): Promise<User> => {
     };
     
     await set(userRef, userData);
-    
+    await registerAccessRequest({
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+    });
+
     return userData;
   } catch (error) {
     console.error('Error al iniciar sesión:', error);
@@ -39,6 +47,7 @@ export const signInWithGoogle = async (): Promise<User> => {
 
 export const signOut = async (): Promise<void> => {
   try {
+    resetFamilyRoot();
     await firebaseSignOut(auth);
   } catch (error) {
     console.error('Error al cerrar sesión:', error);

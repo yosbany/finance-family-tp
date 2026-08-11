@@ -12,7 +12,8 @@ import { Category, Transaction } from '../types';
 /**
  * Normaliza texto para comparación (lowercase, sin acentos, sin espacios extras)
  */
-export const normalizeText = (text: string): string => {
+export const normalizeText = (text: string | undefined | null): string => {
+  if (!text) return '';
   return text
     .toLowerCase()
     .normalize('NFD')
@@ -465,27 +466,28 @@ export const learnFromManualClassification = (
   transaction: Transaction,
   category: Category
 ): string[] => {
+  if (!transaction.description) return [];
+
   const tokens = tokenize(transaction.description);
   const bigrams = generateNGrams(tokens, 2);
   const entities = extractEntities(transaction.description);
 
-  // Combinar tokens individuales y bigrams
   const candidates = [
     ...tokens.filter(t => t.length >= 3),
     ...bigrams,
-    ...entities.codes
-  ];
+    ...entities.codes,
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
 
-  // Filtrar candidatos que no están en los keywords actuales
   const allKeywords = [
-    ...category.keywords,
-    ...category.subcategories.flatMap(sub => sub.keywords)
-  ];
+    ...(category.keywords ?? []),
+    ...(category.subcategories ?? []).flatMap(sub => sub.keywords ?? []),
+  ].filter((keyword): keyword is string => typeof keyword === 'string' && keyword.length > 0);
 
   const newKeywords = candidates.filter(candidate => {
     return !allKeywords.some(keyword => {
       const normalizedKeyword = normalizeText(keyword);
       const normalizedCandidate = normalizeText(candidate);
+      if (!normalizedKeyword || !normalizedCandidate) return false;
       return normalizedKeyword.includes(normalizedCandidate) ||
              normalizedCandidate.includes(normalizedKeyword);
     });

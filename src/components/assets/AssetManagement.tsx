@@ -7,10 +7,12 @@ import {
 } from '../../services/assets.service';
 import { Asset, AssetType, Currency } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
+import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 
 export const AssetManagement = () => {
   const { user } = useAuth();
+  const { showError, showConfirm, ModalComponent } = useModal();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -39,7 +41,7 @@ export const AssetManagement = () => {
 
     try {
       setLoading(true);
-      const data = await getAssets(user.uid);
+      const data = await getAssets();
       setAssets(data);
     } catch (err) {
       console.error('Error al cargar activos:', err);
@@ -61,16 +63,16 @@ export const AssetManagement = () => {
       };
 
       if (editingId) {
-        await updateAsset(user.uid, editingId, assetData);
+        await updateAsset(editingId, assetData);
       } else {
-        await createAsset(user.uid, assetData);
+        await createAsset(assetData);
       }
 
       await loadAssets();
       resetForm();
     } catch (err) {
       console.error('Error al guardar activo:', err);
-      alert('Error al guardar el activo');
+      showError('Error al guardar el activo');
     }
   };
 
@@ -88,17 +90,23 @@ export const AssetManagement = () => {
     setShowForm(true);
   };
 
-  const handleDelete = async (assetId: string) => {
+  const handleDelete = (assetId: string) => {
     if (!user) return;
-    if (!confirm('¿Estás seguro de eliminar este activo?')) return;
 
-    try {
-      await deleteAsset(user.uid, assetId);
-      await loadAssets();
-    } catch (err) {
-      console.error('Error al eliminar activo:', err);
-      alert('Error al eliminar el activo');
-    }
+    showConfirm({
+      title: 'Confirmar eliminación',
+      message: '¿Estás seguro de eliminar este activo?',
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await deleteAsset(assetId);
+          await loadAssets();
+        } catch (err) {
+          console.error('Error al eliminar activo:', err);
+          showError('Error al eliminar el activo');
+        }
+      },
+    });
   };
 
   const resetForm = () => {
@@ -156,7 +164,7 @@ export const AssetManagement = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title">
           Gestión de Patrimonio
         </h1>
         <button
@@ -402,6 +410,7 @@ export const AssetManagement = () => {
           ))
         )}
       </div>
+      <ModalComponent />
     </div>
   );
 };

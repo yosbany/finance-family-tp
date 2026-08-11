@@ -31,8 +31,56 @@
 3. Haz clic en "Publicar"
 
 Las reglas aseguran que:
-- Cada usuario solo puede leer/escribir sus propios datos
-- Los datos están protegidos por autenticación
+- Cualquier usuario autenticado crea su registro en `authorizedUsers/{uid}` con `autorizado: false` y `familyRoot: "family"`
+- Queda en pantalla **Esperando autorización** y no ve datos
+- Un miembro ya aprobado puede aprobarlo desde **Miembros** en la app (`autorizado: true`)
+- El admin también puede cambiar `autorizado` / `familyRoot` en Firebase Console
+
+## Paso 4b: Crear el primer administrador
+
+1. Inicia sesión en la app (se crea automáticamente tu nodo en `authorizedUsers`)
+2. En Firebase Console > Realtime Database, busca `authorizedUsers/{tu_uid}`
+3. Cambia `autorizado` a `true`
+4. Verifica que `familyRoot` sea `"family"` (o el nodo donde están los datos)
+5. Recarga la app
+
+## Paso 4c: Autorizar a otros miembros de la familia
+
+Cuando alguien nuevo inicia sesión, la app crea automáticamente:
+
+```json
+"authorizedUsers/{uid}": {
+  "uid": "...",
+  "email": "...",
+  "displayName": "...",
+  "autorizado": false,
+  "familyRoot": "family",
+  "requestedAt": 1710000000000
+}
+```
+
+Para darle acceso, el admin cambia `autorizado` a `true`.
+
+Para usar otro espacio de datos, el admin cambia `familyRoot` (ej. `"mi-familia"`) y crea/mueve los datos bajo ese nodo en Firebase.
+
+La pantalla de "no autorizado" se actualiza sola sin volver a iniciar sesión.
+
+## Paso 4d: Estructura de datos compartidos
+
+Todos los datos financieros viven bajo `{familyRoot}/` (por defecto `family/`):
+
+```
+{familyRoot}/          ← valor de authorizedUsers/{uid}/familyRoot
+  accounts/
+  transactions/
+  categories/
+  uploadHistory/
+  goals/
+  assets/
+  owners/
+```
+
+Si tenías datos bajo `family/`, mantén `familyRoot: "family"`. Para otro espacio, cambia `familyRoot` y crea la misma estructura bajo el nuevo nodo.
 
 ## Paso 5: Obtener Credenciales
 

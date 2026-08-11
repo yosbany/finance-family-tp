@@ -26,7 +26,7 @@ export const LoginPage = () => {
       <div className="card max-w-md w-full mx-4">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-            💰 Finanzas Familiares
+            💰 Finance Family
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
             Gestiona tus finanzas de manera inteligente

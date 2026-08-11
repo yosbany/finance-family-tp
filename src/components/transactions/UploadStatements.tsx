@@ -1,23 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useModal } from '../../hooks/useModal';
 import { getAccounts } from '../../services/accounts.service';
+import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
 import { createTransactions, parsedToTransaction } from '../../services/transactions.service';
-import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads } from '../../services/uploadHistory.service';
+import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory } from '../../services/uploadHistory.service';
 import { calculateFileHash } from '../../parsers/fileHasher';
 import { parseCSV } from '../../parsers/csvParser';
 import { parseExcel } from '../../parsers/excelParser';
 import { parsePDF } from '../../parsers/pdfParser';
 import { parseByBank, detectBank, getParserInfo } from '../../parsers/banks';
 import { categorizeTransactions } from '../../utils/categorization';
-import { Account, Category, Transaction } from '../../types';
+import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
+import { Account, Category, Transaction, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
 
 export const UploadStatements = () => {
   const { user } = useAuth();
+  const { showSuccess, showError, showConfirm, ModalComponent } = useModal();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // Wizard steps
   const [currentStep, setCurrentStep] = useState(1);
@@ -35,7 +40,10 @@ export const UploadStatements = () => {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [uploadHistory, setUploadHistory] = useState<any[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingStatusFilter, setTrackingStatusFilter] = useState<'all' | 'uploaded' | 'missing'>('all');
   const [useSmartParser, setUseSmartParser] = useState(true);
   const [detectedBank, setDetectedBank] = useState<string | null>(null);
   const [forceUpload, setForceUpload] = useState(false);
@@ -78,6 +86,37 @@ export const UploadStatements = () => {
     loadData();
   }, [user]);
 
+  const prefillUploadWizard = (account: Account, month: number, year: number) => {
+    setSelectedBank(account.bank);
+    setSelectedAccountType(account.type);
+    setSelectedAccount(account.id);
+    setStatementMonth(month);
+    setStatementYear(year);
+    setCurrentStep(4);
+    setFile(null);
+    setResult(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const accountId = searchParams.get('accountId');
+    const monthParam = searchParams.get('month');
+    const yearParam = searchParams.get('year');
+
+    if (!accountId || accounts.length === 0) return;
+
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return;
+
+    prefillUploadWizard(
+      account,
+      monthParam ? parseInt(monthParam, 10) : statementMonth,
+      yearParam ? parseInt(yearParam, 10) : statementYear
+    );
+    setSearchParams({});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, searchParams]);
+
   const loadData = async () => {
     if (!user) {
       setLoading(false);
@@ -87,21 +126,24 @@ export const UploadStatements = () => {
       setLoading(true);
       
       // Migrar registros antiguos automáticamente
-      const migratedCount = await migrateOldUploads(user.uid);
+      const migratedCount = await migrateOldUploads();
       if (migratedCount > 0) {
         console.log(`✅ Migrados ${migratedCount} registros antiguos a Junio 2026`);
       }
       
-      const [accountsData, historyData] = await Promise.all([
-        getAccounts(user.uid),
-        getUploadHistory(user.uid)
+      const [accountsData, historyData, ownersData] = await Promise.all([
+        getAccounts(),
+        getUploadHistory(),
+        getOwners()
       ]);
       setAccounts(accountsData);
       setUploadHistory(historyData);
+      setOwners(ownersData);
     } catch (error) {
       console.error('Error al cargar datos:', error);
       setAccounts([]);
       setUploadHistory([]);
+      setOwners([]);
     } finally {
       setLoading(false);
     }
@@ -167,7 +209,7 @@ export const UploadStatements = () => {
 
       // 2. Verificar si ya fue cargado (a menos que se fuerce la recarga)
       if (!forceUpload) {
-        const isDuplicate = await checkDuplicateUpload(user.uid, fileHash);
+        const isDuplicate = await checkDuplicateUpload(fileHash);
         if (isDuplicate) {
           setResult({
             success: false,
@@ -260,7 +302,7 @@ export const UploadStatements = () => {
 
       // 6. Crear registro de carga
       // Para BHU e IBM, usar el mes/año actual ya que no se requiere período específico
-      const uploadId = await createUploadHistory(user.uid, {
+      const uploadId = await createUploadHistory({
         fileName: file.name,
         fileHash,
         uploadedBy: user.uid,
@@ -278,11 +320,11 @@ export const UploadStatements = () => {
       );
 
       // 8. Categorizar automáticamente
-      const categories = await getCategories(user.uid);
+      const categories = await getCategories();
       const categorizedTransactions = categorizeTransactions(transactions, categories) as Omit<Transaction, 'id' | 'createdAt'>[];
 
       // 9. Guardar en la base de datos
-      await createTransactions(user.uid, categorizedTransactions);
+      await createTransactions(categorizedTransactions);
 
       // 10. Calcular estadísticas
       const categorized = categorizedTransactions.filter(t => t.status === 'classified').length;
@@ -325,6 +367,112 @@ export const UploadStatements = () => {
     }
   };
 
+  const handleUploadedClick = (upload: UploadHistory) => {
+    if (upload.status === 'no_movements') return;
+    navigate(`/transactions?uploadId=${upload.id}`);
+  };
+
+  const handleMissingDoubleClick = (account: Account, month: number, year: number) => {
+    navigate(`/transactions/upload?accountId=${account.id}&month=${month}&year=${year}`);
+  };
+
+  const handleMarkNoMovements = (account: Account, month: number, year: number) => {
+    if (!user) return;
+
+    showConfirm({
+      title: 'Sin movimientos',
+      message: `¿Confirmar que ${account.name} (${monthNames[month - 1]} ${year}) no tuvo movimientos? Se marcará como completado.`,
+      confirmText: 'Confirmar',
+      onConfirm: async () => {
+        try {
+          await markAccountNoMovements(account.id, month, year, user.uid);
+          await loadData();
+          showSuccess('Marcado como sin movimientos');
+        } catch (err) {
+          console.error(err);
+          showError(err instanceof Error ? err.message : 'Error al marcar sin movimientos');
+        }
+      },
+    });
+  };
+
+  const handleUndoNoMovements = (upload: UploadHistory) => {
+    if (!user || upload.status !== 'no_movements') return;
+
+    showConfirm({
+      title: 'Deshacer marca',
+      message: '¿Quitar la marca de "sin movimientos" para este período?',
+      confirmText: 'Quitar marca',
+      onConfirm: async () => {
+        try {
+          await deleteUploadHistory(upload.id);
+          await loadData();
+          showSuccess('Marca eliminada');
+        } catch (err) {
+          console.error(err);
+          showError('Error al quitar la marca');
+        }
+      },
+    });
+  };
+
+  const monthNames = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+
+  const trackingPeriods = useMemo(() => {
+    const periodKeys = new Set<string>();
+    const now = new Date();
+
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      periodKeys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    uploadHistory.forEach(upload => {
+      periodKeys.add(`${upload.statementYear}-${String(upload.statementMonth).padStart(2, '0')}`);
+    });
+
+    return Array.from(periodKeys)
+      .sort()
+      .reverse()
+      .map(key => {
+        const [year, month] = key.split('-');
+        return { key, year: parseInt(year, 10), month: parseInt(month, 10) };
+      });
+  }, [uploadHistory]);
+
+  const uploadByAccountPeriod = useMemo(() => {
+    const map = new Map<string, UploadHistory>();
+    uploadHistory.forEach(upload => {
+      map.set(`${upload.statementYear}-${upload.statementMonth}-${upload.accountId}`, upload);
+    });
+    return map;
+  }, [uploadHistory]);
+
+  const trackingStats = useMemo(() => {
+    let uploaded = 0;
+    let missing = 0;
+    const term = trackingSearch.toLowerCase().trim();
+
+    trackingPeriods.forEach(({ year, month }) => {
+      accounts.forEach(account => {
+        if (term) {
+          const matches =
+            account.name.toLowerCase().includes(term) ||
+            account.bank.toLowerCase().includes(term) ||
+            account.owner.toLowerCase().includes(term);
+          if (!matches) return;
+        }
+        const isUploaded = uploadByAccountPeriod.has(`${year}-${month}-${account.id}`);
+        if (isUploaded) uploaded++;
+        else missing++;
+      });
+    });
+    return { uploaded, missing };
+  }, [trackingPeriods, accounts, uploadByAccountPeriod, trackingSearch]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -333,10 +481,50 @@ export const UploadStatements = () => {
     );
   }
 
+  const matchesTrackingSearch = (account: Account) => {
+    if (!trackingSearch.trim()) return true;
+    const term = trackingSearch.toLowerCase();
+    return (
+      account.name.toLowerCase().includes(term) ||
+      account.bank.toLowerCase().includes(term) ||
+      account.owner.toLowerCase().includes(term)
+    );
+  };
+
+  type TrackingEntry = {
+    account: Account;
+    covered: boolean;
+    upload?: UploadHistory;
+    noMovements: boolean;
+    hasExtract: boolean;
+  };
+
+  const getPeriodEntries = (year: number, month: number): TrackingEntry[] => {
+    return accounts
+      .map(account => {
+        const upload = uploadByAccountPeriod.get(`${year}-${month}-${account.id}`);
+        const noMovements = upload?.status === 'no_movements';
+        const hasExtract = upload?.status === 'processed';
+        return {
+          account,
+          covered: !!upload,
+          upload,
+          noMovements,
+          hasExtract,
+        };
+      })
+      .filter(entry => matchesTrackingSearch(entry.account))
+      .filter(entry => {
+        if (trackingStatusFilter === 'uploaded') return entry.covered;
+        if (trackingStatusFilter === 'missing') return !entry.covered;
+        return true;
+      });
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title-lg">
           Cargar Extracto Bancario
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">
@@ -530,8 +718,8 @@ export const UploadStatements = () => {
                       }}
                       className={`w-full p-4 rounded-lg border-2 text-left transition-all hover:scale-[1.02] ${
                         selectedAccount === account.id
-                          ? 'border-primary bg-primary/10 dark:bg-primary/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-primary/50'
+                          ? 'border-primary bg-primary/10 dark:bg-primary/20 ring-2 ring-primary/40'
+                          : getOwnerCardClasses(account.owner, owners)
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -539,8 +727,13 @@ export const UploadStatements = () => {
                           <div className="font-semibold text-gray-900 dark:text-white">
                             {account.name}
                           </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {account.owner} • {account.currency}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
+                              {account.owner}
+                            </span>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {account.currency}
+                            </span>
                           </div>
                         </div>
                         <div className="text-2xl">
@@ -739,103 +932,182 @@ export const UploadStatements = () => {
         </div>
       </div>
 
-      {/* Información adicional */}
-      <div className="card bg-gray-50 dark:bg-gray-800">
-        <h3 className="font-bold text-gray-900 dark:text-white mb-3">
-          ℹ️ Información Importante
-        </h3>
-        <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <li>• Los archivos NO se almacenan, solo se procesan en memoria</li>
-          <li>• Se calcula un hash SHA-256 para detectar archivos duplicados</li>
-          <li>• Las transacciones se categorizan automáticamente cuando es posible</li>
-          <li>• Puedes clasificar manualmente las transacciones pendientes después</li>
-          <li>• Se guarda un registro de cada carga con fecha, hora y usuario</li>
-          <li>• El parser inteligente reconoce formatos de BROU, Itaú, Santander, OCA, Prex y BHU</li>
-          <li>• Después de procesar, serás redirigido automáticamente a la página de transacciones</li>
-        </ul>
-      </div>
-
-      {/* Panel de Seguimiento de Extractos Subidos */}
-      {uploadHistory.length > 0 && (
+      {/* Panel de Seguimiento de Extractos */}
+      {accounts.length > 0 && (
         <div className="card">
-          <h3 className="font-bold text-gray-900 dark:text-white mb-4">
+          <h3 className="font-bold text-gray-900 dark:text-white mb-2">
             📊 Seguimiento de Extractos Subidos
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Revisa qué extractos has subido por mes/año para cada banco y cuenta
           </p>
-          
-          {/* Agrupar por mes/año */}
-          {(() => {
-            const groupedByPeriod: Record<string, any[]> = {};
-            uploadHistory.forEach(upload => {
-              const key = `${upload.statementYear}-${String(upload.statementMonth).padStart(2, '0')}`;
-              if (!groupedByPeriod[key]) {
-                groupedByPeriod[key] = [];
-              }
-              groupedByPeriod[key].push(upload);
-            });
 
-            const sortedPeriods = Object.keys(groupedByPeriod).sort().reverse();
+          {/* Filtros */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={trackingSearch}
+                onChange={(e) => setTrackingSearch(e.target.value)}
+                placeholder="Buscar por banco, cuenta o titular..."
+                className="input-field pl-10"
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+            </div>
+            <select
+              value={trackingStatusFilter}
+              onChange={(e) => setTrackingStatusFilter(e.target.value as 'all' | 'uploaded' | 'missing')}
+              className="input-field sm:w-48"
+            >
+              <option value="all">Todos</option>
+              <option value="uploaded">✓ Completados</option>
+              <option value="missing">☐ Faltantes</option>
+            </select>
+          </div>
 
-            return (
-              <div className="space-y-4">
-                {sortedPeriods.map(period => {
-                  const [year, month] = period.split('-');
-                  const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-                                     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                  const uploads = groupedByPeriod[period];
+          {/* Resumen */}
+          <div className="flex flex-wrap gap-4 mb-4 text-sm">
+            <span className="flex items-center gap-1.5 text-green-600 dark:text-green-400">
+              <span className="font-bold">✓</span> {trackingStats.uploaded} completos
+            </span>
+            <span className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400">
+              <span className="font-bold">☐</span> {trackingStats.missing} faltantes
+            </span>
+            {trackingStatusFilter !== 'missing' && trackingStats.missing > 0 && (
+              <button
+                type="button"
+                onClick={() => setTrackingStatusFilter('missing')}
+                className="text-primary hover:underline"
+              >
+                Ver solo faltantes
+              </button>
+            )}
+          </div>
 
-                  return (
-                    <div key={period} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                      <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
-                        📅 {monthNames[parseInt(month) - 1]} {year}
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {uploads.map(upload => {
-                          const account = accounts.find(a => a.id === upload.accountId);
-                          return (
-                            <div
-                              key={upload.id}
-                              className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700"
-                            >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-lg">
-                                      {account?.type === 'debit' ? '💳' : '💰'}
-                                    </span>
-                                    <span className="font-medium text-sm text-gray-900 dark:text-white">
-                                      {account?.bank}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
-                                    {account?.name}
-                                  </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                                    {upload.transactionsCount} transacciones
-                                  </p>
-                                </div>
-                                <span className="text-green-500 text-xl">✓</span>
-                              </div>
+          <div className="space-y-4">
+            {trackingPeriods.map(({ key, year, month }) => {
+              const entries = getPeriodEntries(year, month);
+              if (entries.length === 0) return null;
+
+              return (
+                <div key={key} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      📅 {monthNames[month - 1]} {year}
+                    </h4>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {entries.filter(e => e.covered).length}/{entries.length} completos
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {entries.map(({ account, covered, upload, noMovements, hasExtract }) => (
+                      <div
+                        key={`${key}-${account.id}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => hasExtract && upload && handleUploadedClick(upload)}
+                        onDoubleClick={(e) => {
+                          if (noMovements && upload) {
+                            e.preventDefault();
+                            handleUndoNoMovements(upload);
+                            return;
+                          }
+                          if (!covered) handleMissingDoubleClick(account, month, year);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && hasExtract && upload) handleUploadedClick(upload);
+                          if (e.key === 'Enter' && !covered) handleMissingDoubleClick(account, month, year);
+                        }}
+                        className={`p-3 rounded-lg border transition-all ${
+                          noMovements
+                            ? `${getOwnerCardClasses(account.owner, owners)} cursor-pointer hover:ring-2 hover:ring-blue-400/60`
+                            : hasExtract
+                              ? `${getOwnerCardClasses(account.owner, owners)} cursor-pointer hover:ring-2 hover:ring-green-400/60 hover:shadow-sm`
+                              : 'bg-orange-50 dark:bg-orange-900/10 border-dashed border-orange-300 dark:border-orange-700'
+                        }`}
+                        title={
+                          hasExtract
+                            ? 'Clic para ver transacciones de este extracto'
+                            : noMovements
+                              ? 'Doble clic para quitar marca de sin movimientos'
+                              : 'Doble clic para cargar extracto'
+                        }
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">
+                                {account.type === 'debit' ? '💳' : account.type === 'credit' ? '💰' : '📈'}
+                              </span>
+                              <span className="font-medium text-sm text-gray-900 dark:text-white">
+                                {account.bank}
+                              </span>
                             </div>
-                          );
-                        })}
+                            <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                              {account.name}
+                            </p>
+                            <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
+                              {account.owner}
+                            </span>
+                            {hasExtract && upload ? (
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                {upload.transactionsCount} transacciones
+                              </p>
+                            ) : noMovements ? (
+                              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">
+                                Sin movimientos
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium">
+                                  Falta subir
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMarkNoMovements(account, month, year);
+                                  }}
+                                  className="text-xs text-primary hover:underline mt-1 block"
+                                >
+                                  Marcar sin movimientos
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          <span
+                            className={`text-xl flex-shrink-0 ${
+                              hasExtract ? 'text-green-500' : noMovements ? 'text-blue-500' : 'text-orange-400'
+                            }`}
+                            title={
+                              hasExtract ? 'Extracto subido' : noMovements ? 'Sin movimientos' : 'Extracto pendiente'
+                            }
+                          >
+                            {covered ? '✓' : '☐'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {trackingPeriods.every(({ year, month }) => getPeriodEntries(year, month).length === 0) && (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-6">
+              No hay resultados para los filtros aplicados
+            </p>
+          )}
 
           <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-300">
-              💡 <strong>Tip:</strong> Usa este panel para identificar qué extractos faltan por subir cada mes
+              💡 <strong>Tip:</strong> Clic en extractos subidos (✓ verde) para ver transacciones. Doble clic en faltantes (☐) para cargar. Si no hubo movimientos, usa &quot;Marcar sin movimientos&quot; (✓ azul).
             </p>
           </div>
         </div>
       )}
+      <ModalComponent />
     </div>
   );
 };

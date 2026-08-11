@@ -1,10 +1,11 @@
 import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
-import { Category, Subcategory } from '../types';
+import { familyPath } from './familyPaths';
+import { Category } from '../types';
 
-export const createCategory = async (userId: string, category: Omit<Category, 'id'>): Promise<string> => {
+export const createCategory = async (category: Omit<Category, 'id'>): Promise<string> => {
   try {
-    const categoriesRef = ref(database, `categories/${userId}`);
+    const categoriesRef = ref(database, familyPath("categories"));
     const newCategoryRef = push(categoriesRef);
     const categoryId = newCategoryRef.key!;
     
@@ -21,9 +22,9 @@ export const createCategory = async (userId: string, category: Omit<Category, 'i
   }
 };
 
-export const getCategories = async (userId: string): Promise<Category[]> => {
+export const getCategories = async (): Promise<Category[]> => {
   try {
-    const categoriesRef = ref(database, `categories/${userId}`);
+    const categoriesRef = ref(database, familyPath("categories"));
     const snapshot = await get(categoriesRef);
     
     if (!snapshot.exists()) {
@@ -38,9 +39,9 @@ export const getCategories = async (userId: string): Promise<Category[]> => {
   }
 };
 
-export const getCategoryById = async (userId: string, categoryId: string): Promise<Category | null> => {
+export const getCategoryById = async (categoryId: string): Promise<Category | null> => {
   try {
-    const categoryRef = ref(database, `categories/${userId}/${categoryId}`);
+    const categoryRef = ref(database, familyPath("categories", categoryId));
     const snapshot = await get(categoryRef);
     
     if (!snapshot.exists()) {
@@ -54,9 +55,9 @@ export const getCategoryById = async (userId: string, categoryId: string): Promi
   }
 };
 
-export const updateCategory = async (userId: string, categoryId: string, updates: Partial<Category>): Promise<void> => {
+export const updateCategory = async (categoryId: string, updates: Partial<Category>): Promise<void> => {
   try {
-    const categoryRef = ref(database, `categories/${userId}/${categoryId}`);
+    const categoryRef = ref(database, familyPath("categories", categoryId));
     await update(categoryRef, updates);
   } catch (error) {
     console.error('Error al actualizar categoría:', error);
@@ -64,9 +65,9 @@ export const updateCategory = async (userId: string, categoryId: string, updates
   }
 };
 
-export const deleteCategory = async (userId: string, categoryId: string): Promise<void> => {
+export const deleteCategory = async (categoryId: string): Promise<void> => {
   try {
-    const categoryRef = ref(database, `categories/${userId}/${categoryId}`);
+    const categoryRef = ref(database, familyPath("categories", categoryId));
     await remove(categoryRef);
   } catch (error) {
     console.error('Error al eliminar categoría:', error);
@@ -74,8 +75,8 @@ export const deleteCategory = async (userId: string, categoryId: string): Promis
   }
 };
 
-// Inicializar categorías predeterminadas
-export const initializeDefaultCategories = async (userId: string): Promise<void> => {
+// Inicializar categorías predeterminadas (sin keywords: las reglas las agrega el usuario)
+export const initializeDefaultCategories = async (): Promise<void> => {
   try {
     const defaultCategories = [
       {
@@ -83,24 +84,32 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "income" as const,
         icon: "💰",
         color: "#10B981",
-        keywords: ["salario", "sueldo", "pago", "ingreso", "cobro"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-1", name: "Salario", keywords: ["salario", "sueldo", "nómina"] },
-          { id: "sub-2", name: "Freelance", keywords: ["freelance", "trabajo independiente", "proyecto"] },
-          { id: "sub-3", name: "Inversiones", keywords: ["dividendo", "interés", "rendimiento"] },
-          { id: "sub-4", name: "Otros", keywords: [] }
+          { id: "sub-1", name: "Salario", keywords: [] as string[] },
+          { id: "sub-2", name: "Freelance", keywords: [] as string[] },
+          { id: "sub-3", name: "Inversiones", keywords: [] as string[] },
+          { id: "sub-4", name: "Otros", keywords: [] as string[] }
         ]
+      },
+      {
+        name: "Reingreso IVA",
+        type: "income" as const,
+        icon: "🧾",
+        color: "#059669",
+        keywords: ["reingreso iva"] as string[],
+        subcategories: [] as { id: string; name: string; keywords: string[] }[]
       },
       {
         name: "Alimentación",
         type: "expense" as const,
         icon: "🍔",
         color: "#EF4444",
-        keywords: ["supermercado", "tienda", "almacén", "disco", "devoto", "tienda inglesa", "comida", "alimento"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-5", name: "Supermercado", keywords: ["disco", "devoto", "tienda inglesa", "supermercado", "geant"] },
-          { id: "sub-6", name: "Restaurantes", keywords: ["restaurante", "bar", "café", "parrilla"] },
-          { id: "sub-7", name: "Delivery", keywords: ["pedidosya", "rappi", "uber eats", "delivery"] }
+          { id: "sub-5", name: "Supermercado", keywords: [] as string[] },
+          { id: "sub-6", name: "Restaurantes", keywords: [] as string[] },
+          { id: "sub-7", name: "Delivery", keywords: [] as string[] }
         ]
       },
       {
@@ -108,12 +117,12 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "🚗",
         color: "#3B82F6",
-        keywords: ["uber", "taxi", "combustible", "nafta", "gasoil", "estacionamiento", "peaje", "transporte"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-8", name: "Combustible", keywords: ["ancap", "esso", "shell", "petrobras", "nafta", "gasoil"] },
-          { id: "sub-9", name: "Uber/Taxi", keywords: ["uber", "cabify", "taxi"] },
-          { id: "sub-10", name: "Mantenimiento", keywords: ["taller", "mecánico", "service", "repuesto"] },
-          { id: "sub-11", name: "Estacionamiento", keywords: ["estacionamiento", "parking", "peaje"] }
+          { id: "sub-8", name: "Combustible", keywords: [] as string[] },
+          { id: "sub-9", name: "Uber/Taxi", keywords: [] as string[] },
+          { id: "sub-10", name: "Mantenimiento", keywords: [] as string[] },
+          { id: "sub-11", name: "Estacionamiento", keywords: [] as string[] }
         ]
       },
       {
@@ -121,13 +130,13 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "💡",
         color: "#F59E0B",
-        keywords: ["ute", "ose", "antel", "internet", "cable", "servicio"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-12", name: "Electricidad", keywords: ["ute", "luz", "electricidad"] },
-          { id: "sub-13", name: "Agua", keywords: ["ose", "agua"] },
-          { id: "sub-14", name: "Internet", keywords: ["antel", "movistar", "claro", "internet", "fibra"] },
-          { id: "sub-15", name: "Teléfono", keywords: ["antel", "movistar", "claro", "teléfono", "celular"] },
-          { id: "sub-16", name: "Cable", keywords: ["directv", "cablevisión", "cable", "tv"] }
+          { id: "sub-12", name: "Electricidad", keywords: [] as string[] },
+          { id: "sub-13", name: "Agua", keywords: [] as string[] },
+          { id: "sub-14", name: "Internet", keywords: [] as string[] },
+          { id: "sub-15", name: "Teléfono", keywords: [] as string[] },
+          { id: "sub-16", name: "Cable", keywords: [] as string[] }
         ]
       },
       {
@@ -135,12 +144,12 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "🏠",
         color: "#8B5CF6",
-        keywords: ["alquiler", "bhu", "hipoteca", "contribución", "casa", "vivienda"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-17", name: "Alquiler/Hipoteca", keywords: ["alquiler", "bhu", "hipoteca", "préstamo"] },
-          { id: "sub-18", name: "Mantenimiento", keywords: ["pintura", "plomero", "electricista", "reparación"] },
-          { id: "sub-19", name: "Contribución", keywords: ["contribución", "impuesto", "primaria"] },
-          { id: "sub-20", name: "Seguros", keywords: ["seguro", "sura", "mapfre"] }
+          { id: "sub-17", name: "Alquiler/Hipoteca", keywords: [] as string[] },
+          { id: "sub-18", name: "Mantenimiento", keywords: [] as string[] },
+          { id: "sub-19", name: "Contribución", keywords: [] as string[] },
+          { id: "sub-20", name: "Seguros", keywords: [] as string[] }
         ]
       },
       {
@@ -148,12 +157,12 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "⚕️",
         color: "#EC4899",
-        keywords: ["farmacia", "médico", "mutualista", "seguro", "salud"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-21", name: "Mutualista", keywords: ["mutualista", "médica uruguaya", "casmu", "mp"] },
-          { id: "sub-22", name: "Farmacia", keywords: ["farmacia", "medicamento", "farmashop"] },
-          { id: "sub-23", name: "Médicos", keywords: ["médico", "doctor", "consulta", "especialista"] },
-          { id: "sub-24", name: "Seguros", keywords: ["seguro médico", "seguro salud"] }
+          { id: "sub-21", name: "Mutualista", keywords: [] as string[] },
+          { id: "sub-22", name: "Farmacia", keywords: [] as string[] },
+          { id: "sub-23", name: "Médicos", keywords: [] as string[] },
+          { id: "sub-24", name: "Seguros", keywords: [] as string[] }
         ]
       },
       {
@@ -161,12 +170,12 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "🎬",
         color: "#14B8A6",
-        keywords: ["netflix", "spotify", "cine", "teatro", "entretenimiento", "ocio"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-25", name: "Streaming", keywords: ["netflix", "spotify", "disney", "hbo", "amazon prime"] },
-          { id: "sub-26", name: "Cine", keywords: ["cine", "movie", "película"] },
-          { id: "sub-27", name: "Eventos", keywords: ["teatro", "concierto", "show", "evento"] },
-          { id: "sub-28", name: "Hobbies", keywords: ["hobby", "deporte", "gimnasio"] }
+          { id: "sub-25", name: "Streaming", keywords: [] as string[] },
+          { id: "sub-26", name: "Cine", keywords: [] as string[] },
+          { id: "sub-27", name: "Eventos", keywords: [] as string[] },
+          { id: "sub-28", name: "Hobbies", keywords: [] as string[] }
         ]
       },
       {
@@ -174,11 +183,11 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "📚",
         color: "#6366F1",
-        keywords: ["curso", "libro", "universidad", "colegio", "educación", "estudio"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-29", name: "Cursos", keywords: ["curso", "capacitación", "udemy", "coursera"] },
-          { id: "sub-30", name: "Libros", keywords: ["libro", "librería", "amazon"] },
-          { id: "sub-31", name: "Matrícula", keywords: ["matrícula", "colegio", "universidad", "inscripción"] }
+          { id: "sub-29", name: "Cursos", keywords: [] as string[] },
+          { id: "sub-30", name: "Libros", keywords: [] as string[] },
+          { id: "sub-31", name: "Matrícula", keywords: [] as string[] }
         ]
       },
       {
@@ -186,12 +195,12 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "🛍️",
         color: "#F97316",
-        keywords: ["ropa", "zapatos", "mercadolibre", "compra", "shopping"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-32", name: "Ropa", keywords: ["ropa", "vestimenta", "zara", "h&m"] },
-          { id: "sub-33", name: "Electrónica", keywords: ["electrónica", "celular", "computadora", "tecnología"] },
-          { id: "sub-34", name: "Hogar", keywords: ["mueble", "decoración", "hogar", "casa"] },
-          { id: "sub-35", name: "Otros", keywords: ["mercadolibre", "amazon", "compra"] }
+          { id: "sub-32", name: "Ropa", keywords: [] as string[] },
+          { id: "sub-33", name: "Electrónica", keywords: [] as string[] },
+          { id: "sub-34", name: "Hogar", keywords: [] as string[] },
+          { id: "sub-35", name: "Otros", keywords: [] as string[] }
         ]
       },
       {
@@ -199,9 +208,9 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "expense" as const,
         icon: "📦",
         color: "#64748B",
-        keywords: ["otro", "varios", "misceláneo"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-36", name: "Varios", keywords: [] }
+          { id: "sub-36", name: "Varios", keywords: [] as string[] }
         ]
       },
       {
@@ -209,16 +218,16 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
         type: "transfer" as const,
         icon: "🔄",
         color: "#9CA3AF",
-        keywords: ["transferencia", "traspaso", "movimiento interno", "entre cuentas"],
+        keywords: [] as string[],
         subcategories: [
-          { id: "sub-37", name: "Entre cuentas propias", keywords: ["transferencia", "traspaso"] },
-          { id: "sub-38", name: "Entre cuentas familiares", keywords: ["yosba", "yane", "familia"] }
+          { id: "sub-37", name: "Entre cuentas propias", keywords: [] as string[] },
+          { id: "sub-38", name: "Entre cuentas familiares", keywords: [] as string[] }
         ]
       }
     ];
     
     for (const category of defaultCategories) {
-      await createCategory(userId, category);
+      await createCategory(category);
     }
   } catch (error) {
     console.error('Error al inicializar categorías predeterminadas:', error);
@@ -229,21 +238,21 @@ export const initializeDefaultCategories = async (userId: string): Promise<void>
 /**
  * Agrega la categoría de Transferencias Internas si no existe
  */
-export const ensureTransferCategory = async (userId: string): Promise<void> => {
+export const ensureTransferCategory = async (): Promise<void> => {
   try {
-    const categories = await getCategories(userId);
+    const categories = await getCategories();
     const hasTransferCategory = categories.some(c => c.name === "Transferencias Internas");
     
     if (!hasTransferCategory) {
-      await createCategory(userId, {
+      await createCategory({
         name: "Transferencias Internas",
         type: "transfer",
         icon: "🔄",
         color: "#9CA3AF",
-        keywords: ["transferencia", "traspaso", "movimiento interno", "entre cuentas"],
+        keywords: [],
         subcategories: [
-          { id: "sub-37", name: "Entre cuentas propias", keywords: ["transferencia", "traspaso"] },
-          { id: "sub-38", name: "Entre cuentas familiares", keywords: ["yosba", "yane", "familia"] }
+          { id: "sub-37", name: "Entre cuentas propias", keywords: [] },
+          { id: "sub-38", name: "Entre cuentas familiares", keywords: [] }
         ]
       });
       console.log('✅ Categoría "Transferencias Internas" agregada');
@@ -255,15 +264,46 @@ export const ensureTransferCategory = async (userId: string): Promise<void> => {
 };
 
 /**
+ * Crea la categoría de ingreso Reingreso IVA si no existe
+ */
+export const ensureReingresoIvaCategory = async (): Promise<void> => {
+  try {
+    const categories = await getCategories();
+    const hasCategory = categories.some(c => c.name === 'Reingreso IVA' && c.type === 'income');
+
+    if (!hasCategory) {
+      await createCategory({
+        name: 'Reingreso IVA',
+        type: 'income',
+        icon: '🧾',
+        color: '#059669',
+        keywords: ['reingreso iva'],
+        subcategories: [],
+      });
+      console.log('✅ Categoría "Reingreso IVA" agregada');
+    }
+
+    const ingresos = categories.find(c => c.name === 'Ingresos' && c.type === 'income');
+    if (ingresos?.subcategories?.some(sub => sub.name === 'Reingreso IVA')) {
+      const subcategories = ingresos.subcategories.filter(sub => sub.name !== 'Reingreso IVA');
+      await updateCategory(ingresos.id, { subcategories });
+      console.log('✅ "Reingreso IVA" movida de subcategoría a categoría propia');
+    }
+  } catch (error) {
+    console.error('Error al asegurar categoría Reingreso IVA:', error);
+    throw error;
+  }
+};
+
+/**
  * Agrega keywords a una categoría existente
  */
 export const addKeywordsToCategory = async (
-  userId: string,
   categoryId: string,
   newKeywords: string[]
 ): Promise<void> => {
   try {
-    const category = await getCategoryById(userId, categoryId);
+    const category = await getCategoryById(categoryId);
     if (!category) {
       throw new Error('Categoría no encontrada');
     }
@@ -271,7 +311,7 @@ export const addKeywordsToCategory = async (
     const existingKeywords = category.keywords || [];
     const uniqueKeywords = [...new Set([...existingKeywords, ...newKeywords])];
 
-    await updateCategory(userId, categoryId, {
+    await updateCategory(categoryId, {
       keywords: uniqueKeywords
     });
   } catch (error) {
@@ -284,13 +324,12 @@ export const addKeywordsToCategory = async (
  * Agrega keywords a una subcategoría existente
  */
 export const addKeywordsToSubcategory = async (
-  userId: string,
   categoryId: string,
   subcategoryId: string,
   newKeywords: string[]
 ): Promise<void> => {
   try {
-    const category = await getCategoryById(userId, categoryId);
+    const category = await getCategoryById(categoryId);
     if (!category) {
       throw new Error('Categoría no encontrada');
     }
@@ -306,7 +345,7 @@ export const addKeywordsToSubcategory = async (
       return sub;
     });
 
-    await updateCategory(userId, categoryId, {
+    await updateCategory(categoryId, {
       subcategories: updatedSubcategories
     });
   } catch (error) {
@@ -319,12 +358,11 @@ export const addKeywordsToSubcategory = async (
  * Elimina keywords de una categoría
  */
 export const removeKeywordsFromCategory = async (
-  userId: string,
   categoryId: string,
   keywordsToRemove: string[]
 ): Promise<void> => {
   try {
-    const category = await getCategoryById(userId, categoryId);
+    const category = await getCategoryById(categoryId);
     if (!category) {
       throw new Error('Categoría no encontrada');
     }
@@ -333,7 +371,7 @@ export const removeKeywordsFromCategory = async (
       keyword => !keywordsToRemove.includes(keyword)
     );
 
-    await updateCategory(userId, categoryId, {
+    await updateCategory(categoryId, {
       keywords: updatedKeywords
     });
   } catch (error) {
@@ -346,13 +384,12 @@ export const removeKeywordsFromCategory = async (
  * Elimina keywords de una subcategoría
  */
 export const removeKeywordsFromSubcategory = async (
-  userId: string,
   categoryId: string,
   subcategoryId: string,
   keywordsToRemove: string[]
 ): Promise<void> => {
   try {
-    const category = await getCategoryById(userId, categoryId);
+    const category = await getCategoryById(categoryId);
     if (!category) {
       throw new Error('Categoría no encontrada');
     }
@@ -367,7 +404,7 @@ export const removeKeywordsFromSubcategory = async (
       return sub;
     });
 
-    await updateCategory(userId, categoryId, {
+    await updateCategory(categoryId, {
       subcategories: updatedSubcategories
     });
   } catch (error) {

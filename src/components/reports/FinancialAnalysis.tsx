@@ -54,8 +54,8 @@ export const FinancialAnalysis = () => {
     try {
       setLoading(true);
       const [txs, cats] = await Promise.all([
-        getTransactions(user.uid),
-        getCategories(user.uid)
+        getTransactions(),
+        getCategories()
       ]);
       
       // Filtrar solo transacciones categorizadas
@@ -212,7 +212,7 @@ export const FinancialAnalysis = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="page-title">
           Análisis Financiero
         </h1>
       </div>
