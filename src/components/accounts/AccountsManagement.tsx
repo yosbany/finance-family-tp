@@ -6,6 +6,7 @@ import { getOwners, createOwner, deleteOwner, initializeDefaultOwners, migrateAm
 import { Account, Currency } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { IconActionButton } from '../common/IconActionButton';
 import { Modal } from '../common/Modal';
 import BankLogo from '../common/BankLogo';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
@@ -671,12 +672,12 @@ export const AccountsManagement = () => {
                       </div>
 
                       {editingId !== account.id && (
-                        <button
+                        <IconActionButton
+                          variant="edit"
+                          label="Editar"
                           onClick={() => handleEdit(account)}
-                          className="ml-4 px-3 py-1 text-sm bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-                        >
-                          Editar
-                        </button>
+                          className="ml-2"
+                        />
                       )}
                     </div>
                   </div>
@@ -768,12 +769,11 @@ export const AccountsManagement = () => {
                     )}
                   </div>
                   {!owner.isCore && (
-                    <button
+                    <IconActionButton
+                      variant="delete"
+                      label="Eliminar"
                       onClick={() => handleDeleteOwner(owner.id, owner.name)}
-                      className="px-3 py-1 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                    >
-                      🗑️ Eliminar
-                    </button>
+                    />
                   )}
                 </div>
               ))}

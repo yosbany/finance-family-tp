@@ -16,6 +16,7 @@ import { categorizeTransactions } from '../../utils/categorization';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { getBankDownloadGuide } from '../../utils/bankDownloadGuides';
 import { isSnapshotBank, SNAPSHOT_STATEMENT_MONTH } from '../../utils/snapshotBanks';
+import { getClosedStatementPeriod, getClosedMonthsOfCurrentYear } from '../../utils/statementPeriod';
 import { Account, Category, Transaction, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
@@ -87,10 +88,11 @@ export const UploadStatements = () => {
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
   
-  // Statement period
+  // Statement period — por defecto el mes cerrado (mes anterior)
   const currentDate = new Date();
-  const [statementMonth, setStatementMonth] = useState<number>(currentDate.getMonth() + 1);
-  const [statementYear, setStatementYear] = useState<number>(currentDate.getFullYear());
+  const closedPeriod = getClosedStatementPeriod(currentDate);
+  const [statementMonth, setStatementMonth] = useState<number>(closedPeriod.month);
+  const [statementYear, setStatementYear] = useState<number>(closedPeriod.year);
   
   // Other states
   const [loading, setLoading] = useState(false);
@@ -492,19 +494,22 @@ export const UploadStatements = () => {
   const trackingPeriods = useMemo(() => {
     const periodKeys = new Set<string>();
     const now = new Date();
+    const currentYear = now.getFullYear();
+    const searching = trackingSearch.trim().length > 0;
 
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      periodKeys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    // Solo meses cerrados del año en curso
+    getClosedMonthsOfCurrentYear(now).forEach(({ key }) => periodKeys.add(key));
+
+    // Otros años: solo si hay búsqueda y ya tienen extractos cargados
+    if (searching) {
+      uploadHistory.forEach(upload => {
+        if (upload.mode === 'snapshot' || upload.statementMonth < 1 || upload.statementMonth > 12) {
+          return;
+        }
+        if (upload.statementYear === currentYear) return;
+        periodKeys.add(`${upload.statementYear}-${String(upload.statementMonth).padStart(2, '0')}`);
+      });
     }
-
-    uploadHistory.forEach(upload => {
-      // Ignorar cargas snapshot (mes 0) en el calendario mensual
-      if (upload.mode === 'snapshot' || upload.statementMonth < 1 || upload.statementMonth > 12) {
-        return;
-      }
-      periodKeys.add(`${upload.statementYear}-${String(upload.statementMonth).padStart(2, '0')}`);
-    });
 
     return Array.from(periodKeys)
       .sort()
@@ -513,7 +518,7 @@ export const UploadStatements = () => {
         const [year, month] = key.split('-');
         return { key, year: parseInt(year, 10), month: parseInt(month, 10) };
       });
-  }, [uploadHistory]);
+  }, [uploadHistory, trackingSearch]);
 
   const monthlyAccounts = useMemo(
     () => accounts.filter(account => !isSnapshotBank(account.bank)),
@@ -553,6 +558,7 @@ export const UploadStatements = () => {
     let uploaded = 0;
     let missing = 0;
     const term = trackingSearch.toLowerCase().trim();
+    const currentYear = currentDate.getFullYear();
 
     trackingPeriods.forEach(({ year, month }) => {
       monthlyAccounts.forEach(account => {
@@ -564,6 +570,8 @@ export const UploadStatements = () => {
           if (!matches) return;
         }
         const isUploaded = uploadByAccountPeriod.has(`${year}-${month}-${account.id}`);
+        // Otros años solo cuentan si ya tienen extracto
+        if (year !== currentYear && !isUploaded) return;
         if (isUploaded) uploaded++;
         else missing++;
       });
@@ -618,6 +626,8 @@ export const UploadStatements = () => {
   };
 
   const getPeriodEntries = (year: number, month: number): TrackingEntry[] => {
+    const isOtherYear = year !== currentDate.getFullYear();
+
     return monthlyAccounts
       .map(account => {
         const upload = uploadByAccountPeriod.get(`${year}-${month}-${account.id}`);
@@ -633,6 +643,8 @@ export const UploadStatements = () => {
       })
       .filter(entry => matchesTrackingSearch(entry.account))
       .filter(entry => {
+        // Otros años: solo cuentas que ya tienen extracto
+        if (isOtherYear && !entry.covered) return false;
         if (trackingStatusFilter === 'uploaded') return entry.covered;
         if (trackingStatusFilter === 'missing') return !entry.covered;
         return true;
@@ -921,7 +933,7 @@ export const UploadStatements = () => {
               {selectedBank && !isSnapshotBank(selectedBank) && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
                   <label className="label text-yellow-900 dark:text-yellow-200 mb-3">
-                    📅 Período del Extracto (Mes/Año)
+                    📅 Período del Extracto (mes cerrado)
                   </label>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -958,14 +970,15 @@ export const UploadStatements = () => {
                         className="input-field"
                         disabled={processing}
                       >
-                        {Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i).map(year => (
+                        {Array.from({ length: 6 }, (_, i) => currentDate.getFullYear() - i).map(year => (
                           <option key={year} value={year}>{year}</option>
                         ))}
                       </select>
                     </div>
                   </div>
                   <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
-                    ⚠️ Importante: Selecciona el mes y año correcto del extracto. Se validarán las fechas de las transacciones.
+                    Por defecto: mes cerrado ({monthNames[closedPeriod.month - 1]} {closedPeriod.year}).
+                    Cambiá solo si el extracto es de otro período.
                   </p>
                 </div>
               )}
@@ -1099,7 +1112,11 @@ export const UploadStatements = () => {
             📊 Seguimiento de Extractos Subidos
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Extractos mensuales por mes/año, y snapshots (BHU / IBM) por última actualización
+            Meses cerrados de {currentDate.getFullYear()}
+            {closedPeriod.year === currentDate.getFullYear()
+              ? ` (ene–${monthNames[closedPeriod.month - 1].toLowerCase()})`
+              : ''}.
+            Otros años solo aparecen al buscar, si ya tienen extractos.
           </p>
 
           {/* Filtros */}

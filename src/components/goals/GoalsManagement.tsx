@@ -15,7 +15,23 @@ import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColo
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { IconActionButton } from '../common/IconActionButton';
+import {
+  RichTextEditor,
+  sanitizeRichText,
+  isRichTextEmpty,
+} from '../common/RichTextEditor';
 import { DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
+
+const emptyForm = () => ({
+  name: '',
+  description: '',
+  targetAmount: 0,
+  currency: 'USD' as Currency,
+  deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  status: 'active' as GoalStatus,
+  linkedAccountIds: [] as string[],
+});
 
 export const GoalsManagement = () => {
   const { user } = useAuth();
@@ -27,15 +43,7 @@ export const GoalsManagement = () => {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    targetAmount: 0,
-    currency: 'USD' as Currency,
-    deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'active' as GoalStatus,
-    linkedAccountIds: [] as string[]
-  });
+  const [formData, setFormData] = useState(emptyForm);
 
   useEffect(() => {
     loadData();
@@ -58,7 +66,8 @@ export const GoalsManagement = () => {
 
       const normalizedGoals = goalsData.map(g => ({
         ...g,
-        linkedAccountIds: g.linkedAccountIds ?? []
+        description: g.description ?? '',
+        linkedAccountIds: g.linkedAccountIds ?? [],
       }));
 
       const syncedGoals = await syncGoalsProgressFromAccounts(
@@ -111,12 +120,13 @@ export const GoalsManagement = () => {
 
       const goalData = {
         name: formData.name,
+        description: sanitizeRichText(formData.description),
         targetAmount: formData.targetAmount,
         currentAmount,
         currency: formData.currency,
         deadline: new Date(formData.deadline).getTime(),
         status: (currentAmount >= formData.targetAmount ? 'completed' : formData.status) as GoalStatus,
-        linkedAccountIds: formData.linkedAccountIds
+        linkedAccountIds: formData.linkedAccountIds,
       };
 
       if (editingId) {
@@ -133,15 +143,22 @@ export const GoalsManagement = () => {
     }
   };
 
+  const openCreate = () => {
+    setEditingId(null);
+    setFormData(emptyForm());
+    setShowForm(true);
+  };
+
   const handleEdit = (goal: Goal) => {
     setEditingId(goal.id);
     setFormData({
       name: goal.name,
+      description: goal.description ?? '',
       targetAmount: goal.targetAmount,
       currency: goal.currency,
       deadline: new Date(goal.deadline).toISOString().split('T')[0],
       status: goal.status,
-      linkedAccountIds: goal.linkedAccountIds ?? []
+      linkedAccountIds: goal.linkedAccountIds ?? [],
     });
     setShowForm(true);
   };
@@ -170,19 +187,12 @@ export const GoalsManagement = () => {
       ...prev,
       linkedAccountIds: prev.linkedAccountIds.includes(accountId)
         ? prev.linkedAccountIds.filter(id => id !== accountId)
-        : [...prev.linkedAccountIds, accountId]
+        : [...prev.linkedAccountIds, accountId],
     }));
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      targetAmount: 0,
-      currency: 'USD',
-      deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      status: 'active',
-      linkedAccountIds: []
-    });
+    setFormData(emptyForm());
     setEditingId(null);
     setShowForm(false);
   };
@@ -199,13 +209,13 @@ export const GoalsManagement = () => {
   const getStatusColor = (status: GoalStatus) => ({
     active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
     completed: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-    cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+    cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
   }[status]);
 
   const getStatusLabel = (status: GoalStatus) => ({
     active: 'Activo',
     completed: 'Completado',
-    cancelled: 'Cancelado'
+    cancelled: 'Cancelado',
   }[status]);
 
   const getLinkedAccounts = (goal: Goal) =>
@@ -223,7 +233,7 @@ export const GoalsManagement = () => {
       <div className="flex justify-between items-center">
         <h1 className="page-title">Objetivos Financieros</h1>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={openCreate}
           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
         >
           + Nuevo Objetivo
@@ -245,143 +255,6 @@ export const GoalsManagement = () => {
         </div>
       </div>
 
-      {showForm && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
-            {editingId ? 'Editar Objetivo' : 'Nuevo Objetivo'}
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="label">Nombre del Objetivo *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field"
-                  placeholder="Ej: Vivienda Propia"
-                />
-              </div>
-
-              <div>
-                <label className="label">Monto Objetivo *</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={formData.targetAmount}
-                  onChange={(e) => setFormData({ ...formData, targetAmount: parseFloat(e.target.value) || 0 })}
-                  className="input-field"
-                />
-              </div>
-
-              <div>
-                <label className="label">Moneda *</label>
-                <select
-                  required
-                  value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}
-                  className="input-field"
-                >
-                  <option value="UYU">Pesos (UYU)</option>
-                  <option value="USD">Dólares (USD)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Fecha Límite *</label>
-                <input
-                  type="date"
-                  required
-                  value={formData.deadline}
-                  onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-
-              <div>
-                <label className="label">Avance actual (automático)</label>
-                <div className="input-field bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
-                  {formatCurrency(previewCurrentAmount, formData.currency)}
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Calculado desde las cuentas seleccionadas
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Cuentas vinculadas *</label>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                El avance se calcula automáticamente sumando los saldos de estas cuentas
-              </p>
-              {accounts.length === 0 ? (
-                <p className="text-sm text-orange-600 dark:text-orange-400">
-                  No hay cuentas disponibles. Crea cuentas primero en la sección Cuentas.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                  {accounts.map(account => {
-                    const selected = formData.linkedAccountIds.includes(account.id);
-                    const balanceInGoalCurrency = calculateGoalCurrentAmount(
-                      { currency: formData.currency, linkedAccountIds: [account.id], currentAmount: 0 },
-                      [account],
-                      exchangeRates
-                    );
-                    return (
-                      <label
-                        key={account.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-colors ${
-                          selected
-                            ? 'border-primary ring-2 ring-primary/30 ' + getOwnerCardClasses(account.owner, owners)
-                            : getOwnerCardClasses(account.owner, owners)
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleAccount(account.id)}
-                          className="rounded border-gray-300 text-primary focus:ring-primary"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {account.name}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {account.bank} ·{' '}
-                            <span className={`inline-flex px-1.5 py-0.5 rounded-full font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
-                              {account.owner}
-                            </span>
-                          </p>
-                        </div>
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                          {formatCurrency(balanceInGoalCurrency, formData.currency)}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <button type="submit" className="btn-primary">
-                {editingId ? 'Actualizar' : 'Guardar'}
-              </button>
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       <div className="space-y-4">
         {goals.length === 0 ? (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-12 text-center">
@@ -393,7 +266,7 @@ export const GoalsManagement = () => {
               Vincula cuentas bancarias y el progreso se calculará automáticamente
             </p>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={openCreate}
               className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
             >
               + Crear Primer Objetivo
@@ -409,11 +282,12 @@ export const GoalsManagement = () => {
             const progress = calculateProgress(currentAmount, goal.targetAmount);
             const daysRemaining = getDaysRemaining(goal.deadline);
             const isOverdue = daysRemaining < 0 && goal.status === 'active';
+            const hasDescription = !isRichTextEmpty(goal.description);
 
             return (
               <div key={goal.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0 pr-2">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{goal.name}</h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(goal.status)}`}>
@@ -432,21 +306,26 @@ export const GoalsManagement = () => {
                       </span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
+                  <div className="flex gap-1 shrink-0">
+                    <IconActionButton
+                      variant="edit"
+                      label="Editar"
                       onClick={() => handleEdit(goal)}
-                      className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                    >
-                      Editar
-                    </button>
-                    <button
+                    />
+                    <IconActionButton
+                      variant="delete"
+                      label="Eliminar"
                       onClick={() => handleDelete(goal.id)}
-                      className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      Eliminar
-                    </button>
+                    />
                   </div>
                 </div>
+
+                {hasDescription && (
+                  <div
+                    className="mb-4 text-sm text-gray-600 dark:text-gray-300 max-w-none line-clamp-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-blue-600 [&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: sanitizeRichText(goal.description || '') }}
+                  />
+                )}
 
                 <div className="mb-4">
                   <div className="flex justify-between text-sm mb-2">
@@ -505,7 +384,7 @@ export const GoalsManagement = () => {
                   Fecha límite: {new Date(goal.deadline).toLocaleDateString('es-UY', {
                     year: 'numeric',
                     month: 'long',
-                    day: 'numeric'
+                    day: 'numeric',
                   })}
                 </div>
               </div>
@@ -513,6 +392,179 @@ export const GoalsManagement = () => {
           })
         )}
       </div>
+
+      {showForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) resetForm();
+          }}
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col">
+            <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {editingId ? 'Editar Objetivo' : 'Nuevo Objetivo'}
+                </h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Detalles, descripción y cuentas para el avance automático
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="label">Nombre del Objetivo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="input-field"
+                      placeholder="Ej: Vivienda Propia"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="label">Descripción</label>
+                    <RichTextEditor
+                      value={formData.description}
+                      onChange={(description) => setFormData({ ...formData, description })}
+                      placeholder="Notas, plan, requisitos… (negrita, listas, enlaces)"
+                      minHeightClass="min-h-[180px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">Monto Objetivo *</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.01"
+                      value={formData.targetAmount}
+                      onChange={(e) => setFormData({ ...formData, targetAmount: parseFloat(e.target.value) || 0 })}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">Moneda *</label>
+                    <select
+                      required
+                      value={formData.currency}
+                      onChange={(e) => setFormData({ ...formData, currency: e.target.value as Currency })}
+                      className="input-field"
+                    >
+                      <option value="UYU">Pesos (UYU)</option>
+                      <option value="USD">Dólares (USD)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="label">Fecha Límite *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formData.deadline}
+                      onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                      className="input-field"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label">Avance actual (automático)</label>
+                    <div className="input-field bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-white">
+                      {formatCurrency(previewCurrentAmount, formData.currency)}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Calculado desde las cuentas seleccionadas
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Cuentas vinculadas *</label>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    El avance se calcula automáticamente sumando los saldos de estas cuentas
+                  </p>
+                  {accounts.length === 0 ? (
+                    <p className="text-sm text-orange-600 dark:text-orange-400">
+                      No hay cuentas disponibles. Crea cuentas primero en la sección Cuentas.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                      {accounts.map(account => {
+                        const selected = formData.linkedAccountIds.includes(account.id);
+                        const balanceInGoalCurrency = calculateGoalCurrentAmount(
+                          { currency: formData.currency, linkedAccountIds: [account.id], currentAmount: 0 },
+                          [account],
+                          exchangeRates
+                        );
+                        return (
+                          <label
+                            key={account.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition-colors ${
+                              selected
+                                ? 'border-primary ring-2 ring-primary/30 ' + getOwnerCardClasses(account.owner, owners)
+                                : getOwnerCardClasses(account.owner, owners)
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleAccount(account.id)}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                {account.name}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {account.bank} ·{' '}
+                                <span className={`inline-flex px-1.5 py-0.5 rounded-full font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
+                                  {account.owner}
+                                </span>
+                              </p>
+                            </div>
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                              {formatCurrency(balanceInGoalCurrency, formData.currency)}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 rounded-b-xl">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  {editingId ? 'Actualizar' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <ModalComponent />
     </div>
   );

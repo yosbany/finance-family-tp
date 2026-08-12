@@ -150,6 +150,7 @@ export const initializeDefaultGoal = async (): Promise<void> => {
   try {
     await createGoal({
       name: "Comprar Casa Nueva",
+      description: '',
       targetAmount: 100000,
       currentAmount: 0,
       currency: 'USD',

@@ -89,6 +89,7 @@ export interface Asset {
 export interface Goal {
   id: string;
   name: string;
+  description?: string;
   targetAmount: number;
   currentAmount: number;
   currency: Currency;

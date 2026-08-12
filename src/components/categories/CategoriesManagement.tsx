@@ -5,6 +5,7 @@ import { Category, Transaction } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { IconActionButton } from '../common/IconActionButton';
 import { isFixedCategory } from '../../utils/fixedCategories';
 
 export const CategoriesManagement = () => {
@@ -460,28 +461,24 @@ export const CategoriesManagement = () => {
                             />
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
+                        <div className="flex gap-1">
+                          <IconActionButton
+                            variant="edit"
+                            label="Editar"
                             onClick={() => handleEdit(category)}
-                            className="px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                          >
-                            ✏️ Editar
-                          </button>
+                          />
                           {isFixedCategory(category) ? (
-                            <span
-                              className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
-                              title="Categoría fija del sistema"
-                            >
-                              🔒 Fija
-                            </span>
+                            <IconActionButton
+                              variant="lock"
+                              label="Categoría fija del sistema"
+                            />
                           ) : (
-                            <button
+                            <IconActionButton
+                              variant="delete"
+                              label="Eliminar"
                               onClick={() => handleDelete(category.id)}
-                              className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                               disabled={transactionCounts[category.id] > 0}
-                            >
-                              🗑️ Eliminar
-                            </button>
+                            />
                           )}
                         </div>
                       </div>
@@ -658,19 +655,16 @@ export const CategoriesManagement = () => {
                             />
                           </div>
                         </div>
-                        <div className="flex gap-2 items-center">
-                          <button
+                        <div className="flex gap-1 items-center">
+                          <IconActionButton
+                            variant="edit"
+                            label="Editar"
                             onClick={() => handleEdit(category)}
-                            className="px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                          >
-                            ✏️ Editar
-                          </button>
-                          <span
-                            className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
-                            title="Categoría fija del sistema"
-                          >
-                            🔒 Fija
-                          </span>
+                          />
+                          <IconActionButton
+                            variant="lock"
+                            label="Categoría fija del sistema"
+                          />
                         </div>
                       </div>
                       {category.keywords && category.keywords.length > 0 && (
@@ -831,28 +825,24 @@ export const CategoriesManagement = () => {
                             />
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
+                        <div className="flex gap-1">
+                          <IconActionButton
+                            variant="edit"
+                            label="Editar"
                             onClick={() => handleEdit(category)}
-                            className="px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                          >
-                            ✏️ Editar
-                          </button>
+                          />
                           {isFixedCategory(category) ? (
-                            <span
-                              className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
-                              title="Categoría fija del sistema"
-                            >
-                              🔒 Fija
-                            </span>
+                            <IconActionButton
+                              variant="lock"
+                              label="Categoría fija del sistema"
+                            />
                           ) : (
-                            <button
+                            <IconActionButton
+                              variant="delete"
+                              label="Eliminar"
                               onClick={() => handleDelete(category.id)}
-                              className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                               disabled={transactionCounts[category.id] > 0}
-                            >
-                              🗑️ Eliminar
-                            </button>
+                            />
                           )}
                         </div>
                       </div>

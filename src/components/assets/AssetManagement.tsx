@@ -9,6 +9,7 @@ import { Asset, AssetType, Currency } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { IconActionButton } from '../common/IconActionButton';
 
 export const AssetManagement = () => {
   const { user } = useAuth();
@@ -392,19 +393,17 @@ export const AssetManagement = () => {
                 </p>
               )}
 
-              <div className="flex gap-2">
-                <button
+              <div className="flex justify-end gap-1">
+                <IconActionButton
+                  variant="edit"
+                  label="Editar"
                   onClick={() => handleEdit(asset)}
-                  className="flex-1 px-3 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
-                >
-                  Editar
-                </button>
-                <button
+                />
+                <IconActionButton
+                  variant="delete"
+                  label="Eliminar"
                   onClick={() => handleDelete(asset.id)}
-                  className="flex-1 px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Eliminar
-                </button>
+                />
               </div>
             </div>
           ))
