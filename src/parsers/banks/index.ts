@@ -287,7 +287,7 @@ export const getParserInfo = (bank: string) => {
     'Prex': {
       name: 'Prex',
       formats: ['CSV', 'Excel'],
-      types: ['Débito (cuenta única UYU)'],
+      types: ['Débito (UYU; una cuenta por titular)'],
       notes: 'Estado de cuenta con UYU/BRL; BRL se convierte a $U con la tasa de Configuración'
     },
     'BHU': {

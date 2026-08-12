@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAccounts, createAccount, updateAccount, initializeDefaultAccounts, recalculateAllAccountBalances, ensureUnifiedPrexAccount } from '../../services/accounts.service';
+import { getAccounts, createAccount, updateAccount, initializeDefaultAccounts, recalculateAllAccountBalances, migrateLegacyPrexCurrencySplits } from '../../services/accounts.service';
 import { initializeDefaultCategories } from '../../services/categories.service';
 import { getTransactionsByAccount } from '../../services/transactions.service';
 import { getOwners, createOwner, deleteOwner, initializeDefaultOwners, migrateAmbosToNucleo, Owner } from '../../services/owners.service';
@@ -110,7 +110,7 @@ export const AccountsManagement = () => {
         await initializeDefaultCategories();
       }
 
-      await ensureUnifiedPrexAccount();
+      await migrateLegacyPrexCurrencySplits();
       const finalAccounts = await getAccounts();
       setAccounts(finalAccounts);
       setInitializing(false);
@@ -150,7 +150,7 @@ export const AccountsManagement = () => {
         name: editName,
         bank: editBank,
         type: editType,
-        currency: editCurrency,
+        currency: editBank === 'Prex' ? 'UYU' : editCurrency,
         owner: editOwner,
         initialBalance: editInitialBalance
         // Balance no se actualiza manualmente, se recalcula automáticamente
@@ -245,7 +245,7 @@ export const AccountsManagement = () => {
         name: newAccountName.trim(),
         bank: newAccountBank,
         type: newAccountType,
-        currency: newAccountCurrency,
+        currency: (newAccountBank === 'Prex' ? 'UYU' : newAccountCurrency) as Currency,
         owner: newAccountOwner,
         balance: newAccountInitialBalance, // Balance inicial
         initialBalance: newAccountInitialBalance, // Balance inicial
@@ -819,7 +819,14 @@ export const AccountsManagement = () => {
                   </label>
                   <select
                     value={newAccountBank}
-                    onChange={(e) => setNewAccountBank(e.target.value)}
+                    onChange={(e) => {
+                      const bank = e.target.value;
+                      setNewAccountBank(bank);
+                      if (bank === 'Prex') {
+                        setNewAccountCurrency('UYU');
+                        setNewAccountType('debit');
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                   >
                     {banks.map(bank => (
@@ -848,7 +855,8 @@ export const AccountsManagement = () => {
                   <select
                     value={newAccountCurrency}
                     onChange={(e) => setNewAccountCurrency(e.target.value as Currency)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    disabled={newAccountBank === 'Prex'}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-60"
                   >
                     {currencies.map(curr => (
                       <option key={curr.value} value={curr.value}>{curr.label}</option>

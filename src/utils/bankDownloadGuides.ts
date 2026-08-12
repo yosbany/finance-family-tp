@@ -85,11 +85,11 @@ export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
       'Entrá a la App Prex o web e iniciá sesión.',
       'Andá a Movimientos / Estado de cuenta.',
       'Descargá el Excel del período (junio, julio, etc.).',
-      'Subí el archivo acá: Prex → Débito (hay una sola cuenta Prex).',
+      'Subí el archivo acá eligiendo la cuenta Prex del titular (Yosba, Yane, etc.).',
     ],
     tips: [
+      'Podés tener una Prex por persona; no hace falta separar pesos y dólares.',
       'El archivo puede traer UYU y BRL juntos: los BRL se convierten a $U con la tasa BRL de Configuración.',
-      'No hace falta separar pesos y dólares: es una sola cuenta Prex.',
     ],
   },
   BHU: {

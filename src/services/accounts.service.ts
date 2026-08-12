@@ -188,49 +188,72 @@ export const initializeDefaultAccounts = async (): Promise<void> => {
 };
 
 /**
- * Una sola cuenta Prex (UYU). Fusiona Prex Pesos/Dólares si existían.
+ * Migración legacy: por titular, fusiona "Prex Pesos" + "Prex Dólares" en una sola cuenta UYU.
+ * No toca otras cuentas Prex (p. ej. una de Yosba y otra de Yane) ni fuerza el nombre.
  */
-export const ensureUnifiedPrexAccount = async (): Promise<string> => {
+export const migrateLegacyPrexCurrencySplits = async (): Promise<number> => {
   const accounts = await getAccounts();
-  const prexAccounts = accounts.filter(a => a.bank === 'Prex');
+  const legacyName = (name: string) =>
+    /^(prex\s+pesos|prex\s+d[oó]lares)$/i.test(name.trim());
 
-  if (prexAccounts.length === 0) {
-    return createAccount({
-      name: 'Prex',
-      type: 'debit',
-      currency: 'UYU',
-      bank: 'Prex',
-      owner: 'Yosba',
-      balance: 0,
-      initialBalance: 0,
-      lastSync: Date.now(),
-    });
+  const legacyPrex = accounts.filter(a => a.bank === 'Prex' && legacyName(a.name));
+  if (legacyPrex.length === 0) return 0;
+
+  const byOwner = new Map<string, Account[]>();
+  for (const account of legacyPrex) {
+    const list = byOwner.get(account.owner) || [];
+    list.push(account);
+    byOwner.set(account.owner, list);
   }
 
-  const keep =
-    prexAccounts.find(a => a.name === 'Prex') ||
-    prexAccounts.find(a => a.currency === 'UYU') ||
-    prexAccounts[0];
-
-  await updateAccount(keep.id, {
-    name: 'Prex',
-    currency: 'UYU',
-    type: 'debit',
-  });
-
+  let merged = 0;
   const transactions = await getTransactions();
-  for (const other of prexAccounts.filter(a => a.id !== keep.id)) {
-    const toMove = transactions.filter(tx => tx.accountId === other.id);
-    for (const tx of toMove) {
-      await updateTransaction(tx.id, {
-        accountId: keep.id,
-        currency: 'UYU',
-      });
+
+  for (const [, ownerAccounts] of byOwner) {
+    if (ownerAccounts.length < 2) {
+      // Una sola legacy: pasar a UYU si era dólares, sin renombrar a la fuerza
+      const only = ownerAccounts[0];
+      if (only.currency !== 'UYU' || /d[oó]lares/i.test(only.name)) {
+        await updateAccount(only.id, {
+          currency: 'UYU',
+          type: 'debit',
+          name: only.name.replace(/\s+d[oó]lares$/i, '').replace(/\s+pesos$/i, '').trim() || 'Prex',
+        });
+        merged++;
+      }
+      continue;
     }
-    await reassignUploadHistoryAccount(other.id, keep.id);
-    await deleteAccount(other.id);
+
+    const keep =
+      ownerAccounts.find(a => /pesos/i.test(a.name)) ||
+      ownerAccounts.find(a => a.currency === 'UYU') ||
+      ownerAccounts[0];
+
+    const nextName = keep.name.replace(/\s+pesos$/i, '').trim() || 'Prex';
+    await updateAccount(keep.id, {
+      name: nextName,
+      currency: 'UYU',
+      type: 'debit',
+    });
+
+    for (const other of ownerAccounts.filter(a => a.id !== keep.id)) {
+      const toMove = transactions.filter(tx => tx.accountId === other.id);
+      for (const tx of toMove) {
+        await updateTransaction(tx.id, {
+          accountId: keep.id,
+          currency: 'UYU',
+        });
+      }
+      await reassignUploadHistoryAccount(other.id, keep.id);
+      await deleteAccount(other.id);
+      merged++;
+    }
+
+    await recalculateAccountBalance(keep.id);
   }
 
-  await recalculateAccountBalance(keep.id);
-  return keep.id;
+  return merged;
 };
+
+/** @deprecated Usar migrateLegacyPrexCurrencySplits */
+export const ensureUnifiedPrexAccount = migrateLegacyPrexCurrencySplits;

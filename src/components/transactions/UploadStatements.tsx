@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
-import { getAccounts, recalculateAccountBalance, ensureUnifiedPrexAccount } from '../../services/accounts.service';
+import { getAccounts, recalculateAccountBalance, migrateLegacyPrexCurrencySplits } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
 import { createTransactions, parsedToTransaction, deleteTransactionsByFilter } from '../../services/transactions.service';
@@ -191,7 +191,7 @@ export const UploadStatements = () => {
         console.log(`✅ Migrados ${migratedCount} registros antiguos a Junio 2026`);
       }
 
-      await ensureUnifiedPrexAccount();
+      await migrateLegacyPrexCurrencySplits();
 
       const [accountsData, historyData, ownersData, rates] = await Promise.all([
         getAccounts(),
