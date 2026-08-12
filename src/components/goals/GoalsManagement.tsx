@@ -7,13 +7,15 @@ import {
   syncGoalsProgressFromAccounts
 } from '../../services/goals.service';
 import { getAccounts } from '../../services/accounts.service';
-import { Goal, Account, Currency, GoalStatus } from '../../types';
+import { getExchangeRates } from '../../services/settings.service';
+import { Goal, Account, Currency, GoalStatus, ExchangeRates } from '../../types';
 import { calculateGoalCurrentAmount } from '../../utils/calculations';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
 
 export const GoalsManagement = () => {
   const { user } = useAuth();
@@ -21,6 +23,7 @@ export const GoalsManagement = () => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,10 +49,11 @@ export const GoalsManagement = () => {
 
     try {
       setLoading(true);
-      const [goalsData, accountsData, ownersData] = await Promise.all([
+      const [goalsData, accountsData, ownersData, rates] = await Promise.all([
         getGoals(),
         getAccounts(),
-        getOwners()
+        getOwners(),
+        getExchangeRates(),
       ]);
 
       const normalizedGoals = goalsData.map(g => ({
@@ -59,11 +63,13 @@ export const GoalsManagement = () => {
 
       const syncedGoals = await syncGoalsProgressFromAccounts(
         normalizedGoals,
-        accountsData
+        accountsData,
+        rates
       );
 
       setAccounts(accountsData);
       setOwners(ownersData);
+      setExchangeRates(rates);
       setGoals(syncedGoals.sort((a, b) => {
         if (a.status === 'active' && b.status !== 'active') return -1;
         if (a.status !== 'active' && b.status === 'active') return 1;
@@ -82,9 +88,10 @@ export const GoalsManagement = () => {
     if (!formData.linkedAccountIds.length) return 0;
     return calculateGoalCurrentAmount(
       { currency: formData.currency, linkedAccountIds: formData.linkedAccountIds, currentAmount: 0 },
-      accounts
+      accounts,
+      exchangeRates
     );
-  }, [formData.currency, formData.linkedAccountIds, accounts]);
+  }, [formData.currency, formData.linkedAccountIds, accounts, exchangeRates]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,7 +105,8 @@ export const GoalsManagement = () => {
     try {
       const currentAmount = calculateGoalCurrentAmount(
         { currency: formData.currency, linkedAccountIds: formData.linkedAccountIds, currentAmount: 0 },
-        accounts
+        accounts,
+        exchangeRates
       );
 
       const goalData = {
@@ -319,7 +327,8 @@ export const GoalsManagement = () => {
                     const selected = formData.linkedAccountIds.includes(account.id);
                     const balanceInGoalCurrency = calculateGoalCurrentAmount(
                       { currency: formData.currency, linkedAccountIds: [account.id], currentAmount: 0 },
-                      [account]
+                      [account],
+                      exchangeRates
                     );
                     return (
                       <label
@@ -395,7 +404,7 @@ export const GoalsManagement = () => {
             const linkedAccounts = getLinkedAccounts(goal);
             const hasLinkedAccounts = linkedAccounts.length > 0;
             const currentAmount = hasLinkedAccounts
-              ? calculateGoalCurrentAmount(goal, accounts)
+              ? calculateGoalCurrentAmount(goal, accounts, exchangeRates)
               : goal.currentAmount;
             const progress = calculateProgress(currentAmount, goal.targetAmount);
             const daysRemaining = getDaysRemaining(goal.deadline);
@@ -476,7 +485,8 @@ export const GoalsManagement = () => {
                             ({formatCurrency(
                               calculateGoalCurrentAmount(
                                 { currency: goal.currency, linkedAccountIds: [account.id], currentAmount: 0 },
-                                [account]
+                                [account],
+                                exchangeRates
                               ),
                               goal.currency
                             )})

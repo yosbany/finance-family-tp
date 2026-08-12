@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
-import { getAccounts } from '../../services/accounts.service';
+import { getAccounts, recalculateAccountBalance } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
 import { createTransactions, parsedToTransaction } from '../../services/transactions.service';
@@ -381,7 +381,10 @@ export const UploadStatements = () => {
       // 9. Guardar en la base de datos
       await createTransactions(categorizedTransactions);
 
-      // 10. Calcular estadísticas
+      // 10. Actualizar saldo de la cuenta con las nuevas transacciones
+      await recalculateAccountBalance(selectedAccount);
+
+      // 11. Calcular estadísticas
       const categorized = categorizedTransactions.filter(t => t.status === 'classified').length;
       const pending = categorizedTransactions.filter(t => t.status === 'pending').length;
 

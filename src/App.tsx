@@ -12,6 +12,7 @@ import { GoalsManagement } from './components/goals/GoalsManagement';
 import { AccountsManagement } from './components/accounts/AccountsManagement';
 import { CategoriesManagement } from './components/categories/CategoriesManagement';
 import { MembersManagement } from './components/members/MembersManagement';
+import { SettingsPage } from './components/settings/SettingsPage';
 import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
@@ -126,6 +127,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <MembersManagement />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SettingsPage />
               </Layout>
             </ProtectedRoute>
           }

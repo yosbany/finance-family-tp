@@ -1,10 +1,20 @@
 export type AccountType = 'debit' | 'credit' | 'investment';
 export type Currency = 'UYU' | 'USD';
+/** Monedas usadas en conversiones globales (incluye UI). */
+export type ConvertibleCurrency = Currency | 'UI';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type TransactionStatus = 'pending' | 'classified' | 'verified';
 export type AssetType = 'property' | 'vehicle' | 'investment' | 'other';
 export type GoalStatus = 'active' | 'completed' | 'cancelled';
 export type UploadStatus = 'processed' | 'error' | 'no_movements';
+
+export interface ExchangeRates {
+  /** 1 USD = N pesos uruguayos */
+  usdToUyu: number;
+  /** 1 UI (Unidad Indexada) = N pesos uruguayos */
+  uiToUyu: number;
+  updatedAt?: number;
+}
 
 export interface User {
   uid: string;

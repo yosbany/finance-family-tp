@@ -1,4 +1,5 @@
-import { Account, Transaction, Asset, KPIData, Currency } from '../types';
+import { Account, Transaction, Asset, KPIData, Currency, ExchangeRates, ConvertibleCurrency } from '../types';
+import { DEFAULT_EXCHANGE_RATES } from '../services/settings.service';
 
 /**
  * Calcula el balance total por moneda
@@ -101,22 +102,33 @@ export const calculateTotalDebt = (accounts: Account[]): { UYU: number; USD: num
 };
 
 /**
- * Calcula el patrimonio neto
+ * Convierte un monto a pesos uruguayos usando las tasas configuradas.
+ */
+export const toUyu = (
+  amount: number,
+  currency: ConvertibleCurrency,
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
+): number => {
+  if (currency === 'UYU') return amount;
+  if (currency === 'USD') return amount * rates.usdToUyu;
+  return amount * rates.uiToUyu;
+};
+
+/**
+ * Calcula el patrimonio neto en UYU
  */
 export const calculateNetWorth = (
   accounts: Account[],
   assets: Asset[],
-  exchangeRate: number = 40 // Tasa de cambio USD a UYU
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): number => {
-  // Sumar balances de cuentas (en UYU)
   const accountsBalance = accounts.reduce((sum, account) => {
     const balance = account.type === 'credit' ? -Math.abs(account.balance) : account.balance;
-    return sum + (account.currency === 'USD' ? balance * exchangeRate : balance);
+    return sum + toUyu(balance, account.currency, rates);
   }, 0);
 
-  // Sumar valor de activos (en UYU)
   const assetsValue = assets.reduce((sum, asset) => {
-    return sum + (asset.currency === 'USD' ? asset.value * exchangeRate : asset.value);
+    return sum + toUyu(asset.value, asset.currency, rates);
   }, 0);
 
   return accountsBalance + assetsValue;
@@ -129,7 +141,7 @@ export const calculateKPIs = (
   accounts: Account[],
   transactions: Transaction[],
   assets: Asset[],
-  exchangeRate: number = 40
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): KPIData => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -146,8 +158,8 @@ export const calculateKPIs = (
     monthlyIncome,
     monthlyExpenses,
     monthlySavings: monthlyIncome - monthlyExpenses,
-    totalDebt: totalDebt.UYU + totalDebt.USD * exchangeRate,
-    netWorth: calculateNetWorth(accounts, assets, exchangeRate)
+    totalDebt: toUyu(totalDebt.UYU, 'UYU', rates) + toUyu(totalDebt.USD, 'USD', rates),
+    netWorth: calculateNetWorth(accounts, assets, rates)
   };
 };
 
@@ -196,7 +208,7 @@ export const calculateAverageMonthlyExpenses = (
  */
 export const calculateCreditUtilization = (accounts: Account[]): number => {
   const creditAccounts = accounts.filter(a => a.type === 'credit');
-  
+
   if (creditAccounts.length === 0) return 0;
 
   const totalUsed = creditAccounts.reduce((sum, a) => sum + Math.abs(a.balance), 0);
@@ -210,23 +222,30 @@ export const calculateCreditUtilization = (accounts: Account[]): number => {
 /**
  * Formatea un monto con separadores de miles y decimales
  */
-export const formatCurrency = (amount: number, currency: 'UYU' | 'USD' = 'UYU'): string => {
-  const symbol = currency === 'USD' ? 'US$' : '$';
-  return `${symbol} ${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const formatCurrency = (amount: number, currency: ConvertibleCurrency = 'UYU'): string => {
+  if (currency === 'USD') {
+    return `US$ ${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  if (currency === 'UI') {
+    return `${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} UI`;
+  }
+  return `$ ${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 /**
- * Convierte entre monedas
+ * Convierte entre UYU, USD y UI usando las tasas configuradas.
  */
 export const convertCurrency = (
   amount: number,
-  from: 'UYU' | 'USD',
-  to: 'UYU' | 'USD',
-  exchangeRate: number = 40
+  from: ConvertibleCurrency,
+  to: ConvertibleCurrency,
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): number => {
   if (from === to) return amount;
-  if (from === 'USD') return amount * exchangeRate;
-  return amount / exchangeRate;
+  const inUyu = toUyu(amount, from, rates);
+  if (to === 'UYU') return inUyu;
+  if (to === 'USD') return inUyu / rates.usdToUyu;
+  return inUyu / rates.uiToUyu;
 };
 
 /**
@@ -235,7 +254,7 @@ export const convertCurrency = (
 export const calculateGoalCurrentAmount = (
   goal: { currency: Currency; linkedAccountIds?: string[]; currentAmount: number },
   accounts: Account[],
-  exchangeRate: number = 40
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): number => {
   if (!goal.linkedAccountIds?.length) {
     return goal.currentAmount;
@@ -249,10 +268,8 @@ export const calculateGoalCurrentAmount = (
       ? -Math.abs(account.balance)
       : account.balance;
 
-    return sum + convertCurrency(value, account.currency, goal.currency, exchangeRate);
+    return sum + convertCurrency(value, account.currency, goal.currency, rates);
   }, 0);
 
   return Math.round(total * 100) / 100;
 };
-
-// Made with Bob

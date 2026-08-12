@@ -4,7 +4,7 @@ import { ParsedTransaction, Currency } from '../../types';
 import { parseBROUDebitCSV, parseBROUCreditCSV, parseBROUExcel } from './brouParser';
 import { parseItauDebitCSV, parseItauCreditCSV, parseItauCreditPDF, parseItauExcel } from './itauParser';
 import { parseSantanderDebitCSV, parseSantanderCreditCSV, parseSantanderExcel } from './santanderParser';
-import { parseOCAMasterCSV, parseOCAVisaCSV, parseOCAExcel } from './ocaParser';
+import { parseOCAMasterCSV, parseOCAVisaCSV, parseOCAExcel, parseOCAPDFText } from './ocaParser';
 import { parsePrexCSV, parsePrexExcel } from './prexParser';
 import { parseBHUCSV, parseBHUExcel, parseBHUPDFText } from './bhuParser';
 import { parseIBMExcel } from './ibmParser';
@@ -71,6 +71,9 @@ export const getBankParser = (config: BankParserConfig) => {
     }
     if (fileType === 'excel') {
       return parseOCAExcel;
+    }
+    if (fileType === 'pdf') {
+      return parseOCAPDFText;
     }
   }
 

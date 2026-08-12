@@ -1,8 +1,9 @@
 import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
 import { familyPath } from './familyPaths';
-import { Goal, GoalStatus, Account } from '../types';
+import { Goal, GoalStatus, Account, ExchangeRates } from '../types';
 import { calculateGoalCurrentAmount } from '../utils/calculations';
+import { DEFAULT_EXCHANGE_RATES } from './settings.service';
 
 export const createGoal = async (goal: Omit<Goal, 'id' | 'createdAt'>): Promise<string> => {
   try {
@@ -96,7 +97,8 @@ export const updateGoalProgress = async (goalId: string, currentAmount: number):
 
 export const syncGoalsProgressFromAccounts = async (
   goals: Goal[],
-  accounts: Account[]
+  accounts: Account[],
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): Promise<Goal[]> => {
   const synced: Goal[] = [];
 
@@ -106,7 +108,7 @@ export const syncGoalsProgressFromAccounts = async (
       continue;
     }
 
-    const currentAmount = calculateGoalCurrentAmount(goal, accounts);
+    const currentAmount = calculateGoalCurrentAmount(goal, accounts, rates);
     const status: GoalStatus =
       goal.status === 'cancelled'
         ? 'cancelled'

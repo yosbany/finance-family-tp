@@ -4,6 +4,7 @@ import {
   getTransactions,
   updateTransaction,
   deleteTransactionsByFilter,
+  deleteTransactionsByIds,
   deleteAllTransactions,
 } from '../../services/transactions.service';
 import { getAccounts, recalculateAccountBalance, recalculateAllAccountBalances } from '../../services/accounts.service';
@@ -56,6 +57,7 @@ export const TransactionList = () => {
   const [deleteMonth, setDeleteMonth] = useState(now.getMonth() + 1);
   const [deleteYear, setDeleteYear] = useState(now.getFullYear());
   const [showCleanupPanel, setShowCleanupPanel] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -123,6 +125,11 @@ export const TransactionList = () => {
     }).length;
   };
 
+  const countMatchingForAccount = () => {
+    if (!deleteAccountId) return 0;
+    return transactions.filter(tx => tx.accountId === deleteAccountId).length;
+  };
+
   const handleDeleteByAccountPeriod = () => {
     if (!deleteAccountId) {
       showError('Selecciona una cuenta');
@@ -156,11 +163,53 @@ export const TransactionList = () => {
             year: deleteYear,
           });
           await recalculateAccountBalance(deleteAccountId);
+          setSelectedIds(new Set());
           await loadData();
           showSuccess(`Eliminadas ${deletedTx} transacciones de ${periodLabel}`);
         } catch (err) {
           console.error(err);
           showError('No se pudieron eliminar las transacciones');
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  };
+
+  const handleDeleteAllForAccount = () => {
+    if (!deleteAccountId) {
+      showError('Selecciona una cuenta');
+      return;
+    }
+
+    const account = accounts.find(a => a.id === deleteAccountId);
+    const count = countMatchingForAccount();
+
+    if (count === 0) {
+      showInfo(`No hay transacciones en "${account?.name || 'esa cuenta'}"`);
+      return;
+    }
+
+    showConfirm({
+      title: 'Eliminar todas las de la cuenta',
+      message: `Se eliminarán las ${count} transacción(es) de "${account?.name}" y su historial de extractos. El saldo volverá al balance inicial. ¿Continuar?`,
+      confirmText: 'Eliminar transacciones',
+      onConfirm: async () => {
+        try {
+          setDeleting(true);
+          const deletedTx = await deleteTransactionsByFilter({
+            accountId: deleteAccountId,
+          });
+          await deleteUploadHistoryByFilter({
+            accountId: deleteAccountId,
+          });
+          await recalculateAccountBalance(deleteAccountId);
+          setSelectedIds(new Set());
+          await loadData();
+          showSuccess(`Eliminadas ${deletedTx} transacciones de ${account?.name}`);
+        } catch (err) {
+          console.error(err);
+          showError('No se pudieron eliminar las transacciones de la cuenta');
         } finally {
           setDeleting(false);
         }
@@ -180,11 +229,74 @@ export const TransactionList = () => {
           await deleteAllUploadHistory();
           await recalculateAllAccountBalances();
           setSearchParams({});
+          setSelectedIds(new Set());
           await loadData();
           showSuccess(`Limpieza completa: ${deletedTx} transacciones eliminadas`);
         } catch (err) {
           console.error(err);
           showError('No se pudo limpiar las transacciones');
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
+  };
+
+  const toggleSelectTransaction = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectVisible = (visible: Transaction[]) => {
+    const visibleIds = visible.map(tx => tx.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        visibleIds.forEach(id => next.delete(id));
+      } else {
+        visibleIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) {
+      showInfo('Seleccioná al menos una transacción');
+      return;
+    }
+
+    const affectedAccountIds = [
+      ...new Set(
+        transactions
+          .filter(tx => selectedIds.has(tx.id))
+          .map(tx => tx.accountId)
+      ),
+    ];
+
+    showConfirm({
+      title: 'Eliminar seleccionadas',
+      message: `Se eliminarán ${ids.length} transacción(es) seleccionada(s). ¿Continuar?`,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          setDeleting(true);
+          const deleted = await deleteTransactionsByIds(ids);
+          for (const accountId of affectedAccountIds) {
+            await recalculateAccountBalance(accountId);
+          }
+          setSelectedIds(new Set());
+          await loadData();
+          showSuccess(`Eliminadas ${deleted} transacciones`);
+        } catch (err) {
+          console.error(err);
+          showError('No se pudieron eliminar las transacciones seleccionadas');
         } finally {
           setDeleting(false);
         }
@@ -355,54 +467,92 @@ export const TransactionList = () => {
     }).format(amount);
   };
 
-  const renderTransactionRow = (transaction: Transaction) => (
-    <tr
-      key={transaction.id}
-      onDoubleClick={() => openCategorizeModal(transaction)}
-      className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
-      title="Doble clic para categorizar"
-    >
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-        {new Date(transaction.date).toLocaleDateString('es-UY')}
-      </td>
-      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-        {transaction.description}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm">
-        {(() => {
-          const account = getAccount(transaction.accountId);
-          if (!account) return <span className="text-gray-600 dark:text-gray-400">Desconocida</span>;
-          return (
-            <div className="flex items-center gap-2">
-              <span className="text-gray-900 dark:text-white">{account.name}</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeColor(account.owner)}`}>
-                {account.owner}
-              </span>
-            </div>
-          );
-        })()}
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm">
-        <span
-          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-          style={{
-            backgroundColor: `${getCategoryColor(transaction.category || '')}20`,
-            color: getCategoryColor(transaction.category || '')
-          }}
+  const renderTransactionRow = (transaction: Transaction) => {
+    const selected = selectedIds.has(transaction.id);
+    return (
+      <tr
+        key={transaction.id}
+        onDoubleClick={() => openCategorizeModal(transaction)}
+        className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
+          selected ? 'bg-blue-50/70 dark:bg-blue-900/20' : ''
+        }`}
+        title="Doble clic para categorizar"
+      >
+        <td
+          className="px-4 py-4 whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
         >
-          {getCategoryName(transaction.category || '')}
-        </span>
-      </td>
-      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
-        transaction.type === 'income'
-          ? 'text-green-600 dark:text-green-400'
-          : 'text-red-600 dark:text-red-400'
-      }`}>
-        {transaction.type === 'income' ? '+' : '-'}
-        {formatAmount(Math.abs(transaction.amount), transaction.currency)}
-      </td>
-    </tr>
-  );
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => toggleSelectTransaction(transaction.id)}
+            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+            aria-label={`Seleccionar ${transaction.description}`}
+          />
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+          {new Date(transaction.date).toLocaleDateString('es-UY')}
+        </td>
+        <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+          {transaction.description}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm">
+          {(() => {
+            const account = getAccount(transaction.accountId);
+            if (!account) return <span className="text-gray-600 dark:text-gray-400">Desconocida</span>;
+            return (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-900 dark:text-white">{account.name}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeColor(account.owner)}`}>
+                  {account.owner}
+                </span>
+              </div>
+            );
+          })()}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm">
+          <span
+            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+            style={{
+              backgroundColor: `${getCategoryColor(transaction.category || '')}20`,
+              color: getCategoryColor(transaction.category || '')
+            }}
+          >
+            {getCategoryName(transaction.category || '')}
+          </span>
+        </td>
+        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
+          transaction.type === 'income'
+            ? 'text-green-600 dark:text-green-400'
+            : 'text-red-600 dark:text-red-400'
+        }`}>
+          {transaction.type === 'income' ? '+' : '-'}
+          {formatAmount(Math.abs(transaction.amount), transaction.currency)}
+        </td>
+      </tr>
+    );
+  };
+
+  const renderSelectAllHeader = (visible: Transaction[]) => {
+    const visibleIds = visible.map(tx => tx.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+    const someSelected = visibleIds.some(id => selectedIds.has(id));
+    return (
+      <th className="px-4 py-3 w-10">
+        <input
+          type="checkbox"
+          checked={allSelected}
+          ref={(el) => {
+            if (el) el.indeterminate = someSelected && !allSelected;
+          }}
+          onChange={() => toggleSelectVisible(visible)}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          aria-label="Seleccionar todas las visibles"
+        />
+      </th>
+    );
+  };
 
   const uploadAccount = uploadInfo
     ? accounts.find(a => a.id === uploadInfo.accountId)
@@ -438,7 +588,7 @@ export const TransactionList = () => {
           <button
             type="button"
             onClick={() => setShowCleanupPanel(prev => !prev)}
-            className="px-3 py-2 text-sm rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50"
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           >
             {showCleanupPanel ? 'Ocultar limpieza' : 'Limpiar / eliminar'}
           </button>
@@ -446,13 +596,13 @@ export const TransactionList = () => {
       </div>
 
       {showCleanupPanel && (
-        <div className="card border border-red-200 dark:border-red-800 space-y-4">
+        <div className="card border border-gray-200 dark:border-gray-700 space-y-4">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Eliminar transacciones
+            <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+              Eliminar por cuenta o período
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Podés borrar por cuenta y mes/año, o limpiar todo para empezar de cero.
+              También podés marcar filas abajo y borrar solo las seleccionadas.
             </p>
           </div>
 
@@ -500,23 +650,64 @@ export const TransactionList = () => {
               type="button"
               onClick={handleDeleteByAccountPeriod}
               disabled={deleting || !deleteAccountId}
-              className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
             >
               {deleting ? 'Eliminando...' : `Eliminar período (${countMatchingForCleanup()})`}
             </button>
           </div>
 
-          <div className="pt-3 border-t border-red-200 dark:border-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <p className="text-sm text-red-700 dark:text-red-300">
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Borrar todas las transacciones de la cuenta seleccionada (todos los meses) y sus extractos.
+            </p>
+            <button
+              type="button"
+              onClick={handleDeleteAllForAccount}
+              disabled={deleting || !deleteAccountId || countMatchingForAccount() === 0}
+              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 whitespace-nowrap"
+            >
+              {deleting
+                ? 'Eliminando...'
+                : `Eliminar todas de la cuenta (${countMatchingForAccount()})`}
+            </button>
+          </div>
+
+          <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Limpieza total: borra todas las transacciones y el historial de extractos.
             </p>
             <button
               type="button"
               onClick={handleDeleteAllTransactions}
               disabled={deleting || transactions.length === 0}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+              className="px-4 py-2 rounded-lg border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 whitespace-nowrap"
             >
               {deleting ? 'Limpiando...' : `Limpiar todas (${transactions.length})`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className="sticky top-2 z-10 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <p className="text-sm text-gray-700 dark:text-gray-200">
+            {selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-sm rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              Quitar selección
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              disabled={deleting}
+              className="px-3 py-1.5 text-sm rounded-md border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+            >
+              {deleting ? 'Eliminando...' : `Eliminar seleccionadas (${selectedIds.size})`}
             </button>
           </div>
         </div>
@@ -737,6 +928,7 @@ export const TransactionList = () => {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  {renderSelectAllHeader(sortedPending)}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Fecha
                   </th>
@@ -780,6 +972,7 @@ export const TransactionList = () => {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
+                  {renderSelectAllHeader(sortedCategorized)}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Fecha
                   </th>

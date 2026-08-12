@@ -193,6 +193,14 @@ export const deleteTransactionsByFilter = async (filter: {
   return toDelete.length;
 };
 
+export const deleteTransactionsByIds = async (ids: string[]): Promise<number> => {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  for (const id of uniqueIds) {
+    await deleteTransaction(id);
+  }
+  return uniqueIds.length;
+};
+
 export const deleteAllTransactions = async (): Promise<number> => {
   const transactionsRef = ref(database, familyPath('transactions'));
   const snapshot = await get(transactionsRef);

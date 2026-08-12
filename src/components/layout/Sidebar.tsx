@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { path: '/goals', label: 'Objetivos', icon: '🎯' },
   { path: '/reports', label: 'Reportes', icon: '📈' },
   { path: '/members', label: 'Miembros', icon: '👥' },
+  { path: '/settings', label: 'Configuración', icon: '⚙️' },
 ];
 
 export const Sidebar = () => {

@@ -5,9 +5,9 @@ import { getAccounts } from '../../services/accounts.service';
 import { initializeDefaultAccounts } from '../../services/accounts.service';
 import { initializeDefaultCategories } from '../../services/categories.service';
 import { getTransactions } from '../../services/transactions.service';
-import { Account, Transaction } from '../../types';
-import { calculateKPIs } from '../../utils/calculations';
-import { formatCurrency } from '../../utils/calculations';
+import { getExchangeRates } from '../../services/settings.service';
+import { Account, ExchangeRates, Transaction } from '../../types';
+import { formatCurrency, toUyu } from '../../utils/calculations';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { KPICard } from './KPICard';
 import { LoadingSpinner } from '../common/LoadingSpinner';
@@ -17,6 +17,7 @@ export const Dashboard = () => {
   const { user } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
 
@@ -32,10 +33,12 @@ export const Dashboard = () => {
 
     try {
       setLoading(true);
-      const [accountsData, transactionsData] = await Promise.all([
+      const [accountsData, transactionsData, rates] = await Promise.all([
         getAccounts(),
-        getTransactions()
+        getTransactions(),
+        getExchangeRates(),
       ]);
+      setExchangeRates(rates);
       
       // Si no hay cuentas, inicializar datos predeterminados
       if (accountsData.length === 0) {
@@ -80,6 +83,10 @@ export const Dashboard = () => {
     );
   }
 
+  if (!exchangeRates) {
+    return null;
+  }
+
   // Calcular totales de transacciones categorizadas (todos los períodos)
   const totalIncome = transactions
     .filter(tx => tx.type === 'income')
@@ -103,9 +110,11 @@ export const Dashboard = () => {
     },
     { UYU: 0, USD: 0 } as { UYU: number; USD: number }
   );
-  
-  // Calcular patrimonio neto (cuentas + activos - deudas)
-  const netWorth = totalBalance.UYU + totalBalance.USD * 40;
+
+  const rates = exchangeRates!;
+  const totalInUyu =
+    toUyu(totalBalance.UYU, 'UYU', rates) + toUyu(totalBalance.USD, 'USD', rates);
+  const netWorth = totalInUyu;
 
   return (
     <div className="space-y-6">
@@ -116,6 +125,10 @@ export const Dashboard = () => {
         </h1>
         <p className="page-subtitle">
           Resumen de tus finanzas familiares
+          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+            (USD→$U {rates.usdToUyu} · UI→$U {rates.uiToUyu} ·{' '}
+            <Link to="/settings" className="underline hover:text-primary">Configurar</Link>)
+          </span>
         </p>
       </div>
 
@@ -132,6 +145,12 @@ export const Dashboard = () => {
           value={formatCurrency(totalBalance.USD, 'USD')}
           icon="💵"
           color="success"
+        />
+        <KPICard
+          title="Todo en pesos"
+          value={formatCurrency(totalInUyu, 'UYU')}
+          icon="💱"
+          color="primary"
         />
         <KPICard
           title="Ingresos Totales"
