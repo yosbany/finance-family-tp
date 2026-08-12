@@ -95,161 +95,138 @@ export const parseItauCreditCSV = (content: string): ParsedTransaction[] => {
 export const parseItauCreditPDF = (content: string): ParsedTransaction[] => {
   const transactions: ParsedTransaction[] = [];
 
-  console.log('📄 Contenido PDF (primeros 1000 chars):', content.substring(0, 1000));
+  // Solo el cuerpo de movimientos (hasta SALDO CONTADO). Ignorar financiación / página 2.
+  const startMarker = content.search(/SALDO DEL ESTADO DE CUENTA ANTERIOR/i);
+  const endMarker = content.search(/SALDO CONTADO/i);
+  const body =
+    startMarker >= 0
+      ? content.slice(
+          startMarker,
+          endMarker > startMarker ? endMarker : content.length
+        )
+      : content.split(/Financiá tus saldos|PESOS URUGUAYOS/i)[0];
 
-  // El PDF viene todo en una línea, necesitamos dividirlo por patrones de fecha
-  // Patrón: DD MM AA seguido de código o palabra clave
-  // Dividir el contenido usando el patrón de fecha como delimitador
-  const datePattern = /(\d{2}\s+\d{2}\s+\d{2}\s+(?:PAGOS|\d{4}))/g;
-  
-  // Encontrar todas las coincidencias con sus posiciones
-  const matches: Array<{index: number, text: string}> = [];
-  let match;
-  while ((match = datePattern.exec(content)) !== null) {
-    matches.push({
-      index: match.index,
-      text: match[0]
+  const statementDateMatch = content.match(/\b(\d{2})\/(\d{2})\/(\d{2})\b/);
+  const fallbackDate = statementDateMatch
+    ? new Date(
+        2000 + parseInt(statementDateMatch[3], 10),
+        parseInt(statementDateMatch[2], 10) - 1,
+        parseInt(statementDateMatch[1], 10)
+      )
+    : new Date();
+
+  const parseMoneyToken = (token: string): number | null => {
+    const negative = token.trim().startsWith('-');
+    const raw = token.trim().replace(/-/g, '');
+    // miles con punto: 28.610,65 · o simple 1930,10 / 20,00
+    const normalized = raw.includes('.')
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw.replace(',', '.');
+    const n = Number(normalized);
+    if (!Number.isFinite(n) || n === 0) return null;
+    return negative ? -n : n;
+  };
+
+  const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
+
+  const pushTx = (
+    date: Date,
+    description: string,
+    signedAmount: number,
+    currency: Currency
+  ) => {
+    if (!signedAmount) return;
+    const type: TransactionType = signedAmount < 0 ? 'income' : 'expense';
+    transactions.push({
+      date,
+      description: description.replace(/\s+/g, ' ').trim(),
+      amount: Math.abs(signedAmount),
+      currency,
+      type,
     });
+  };
+
+  // Dividir por fechas DD MM AA + (PAGOS|código tarjeta)
+  const datePattern = /(\d{2}\s+\d{2}\s+\d{2}\s+(?:PAGOS|\d{4}))/g;
+  const matches: Array<{ index: number }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = datePattern.exec(body)) !== null) {
+    matches.push({ index: match.index });
   }
-  
-  console.log('📄 Transacciones encontradas:', matches.length);
-  
-  // Crear líneas individuales para cada transacción
-  const lines: string[] = [];
+
   for (let i = 0; i < matches.length; i++) {
     const start = matches[i].index;
-    const end = i < matches.length - 1 ? matches[i + 1].index : content.length;
-    const line = content.substring(start, end).trim();
-    if (line) {
-      lines.push(line);
+    const end = i < matches.length - 1 ? matches[i + 1].index : body.length;
+    let line = body.slice(start, end).trim();
+    // Cortar si se coló un cargo sin fecha al final de la última línea
+    const feeCut = line.search(/\sINTERESES\s|\sSEGURO DE VIDA\s/i);
+    if (feeCut > 20) line = line.slice(0, feeCut);
+
+    const header = line.match(/^(\d{2})\s+(\d{2})\s+(\d{2})\s+(PAGOS|\d{4})\s+(.*)$/i);
+    if (!header) continue;
+
+    const [, day, month, year, cardOrPago, rest] = header;
+    const date = new Date(2000 + parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    if (isNaN(date.getTime())) continue;
+
+    const amounts = [...rest.matchAll(moneyRe)].map(m => parseMoneyToken(m[0])).filter((n): n is number => n != null);
+    if (amounts.length === 0) continue;
+
+    let description = rest.replace(moneyRe, ' ').replace(/\s+/g, ' ').trim();
+    const cuota = description.match(/\b(\d+)\s*\/\s*(\d+)\b/);
+    if (cuota) {
+      description = description.replace(cuota[0], '').replace(/\s+/g, ' ').trim();
+      description = `${description} (${cuota[1]}/${cuota[2]})`;
     }
-  }
-  
-  console.log('📄 Líneas procesadas:', lines.length);
-  console.log('📄 Primeras 3 líneas:', lines.slice(0, 3));
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // Patrón 1: Transacciones con código de 4 dígitos
-    // Ejemplo: "           18 04 26  5029    OPENAI                                                       5,02                        5,02"
-    // Ejemplo: "           14 02 26  5029    JOYERIA REVELLO                     3/ 6                                3001,65"
-    const match1 = line.match(/(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{4})\s+(.+?)\s+([\d,\.]+)\s*$/);
-    
-    if (i < 30 && line.includes('26') && line.includes('5029')) {
-      console.log(`🔍 Línea ${i}:`, line);
-      console.log('   Match1:', match1 ? 'SÍ' : 'NO');
-    }
-    
-    if (match1) {
-      console.log('✅ Match1 encontrado:', match1[0]);
-      const [, day, month, year, code, rest, lastAmount] = match1;
-      
-      // Construir fecha
-      const fullYear = 2000 + parseInt(year);
-      const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
-      if (isNaN(date.getTime())) continue;
-      
-      // Extraer descripción y cuotas
-      const restParts = rest.trim().split(/\s{2,}/); // Dividir por 2 o más espacios
-      let description = restParts[0] || '';
-      let cuotas = '';
-      
-      // Buscar patrón de cuotas (N/M)
-      for (const part of restParts) {
-        if (/^\d+\/\s*\d+$/.test(part.trim())) {
-          cuotas = part.trim();
-          break;
-        }
+
+    if (cardOrPago.toUpperCase() === 'PAGOS') {
+      description = 'PAGO TARJETA DE CRÉDITO';
+      // Importe $ y/o Importe U$S
+      if (amounts.length >= 2) {
+        const [pesos, dollars] = amounts;
+        if (pesos) pushTx(date, description, pesos, 'UYU');
+        if (dollars) pushTx(date, `${description} (USD)`, dollars, 'USD');
+      } else {
+        pushTx(date, description, amounts[0], 'UYU');
       }
-      
-      if (cuotas) {
-        description += ` (${cuotas})`;
-      }
-      
-      // Parsear monto
-      const cleanAmount = lastAmount.replace(/\./g, '').replace(',', '.');
-      const amountValue = parseFloat(cleanAmount);
-      
-      if (isNaN(amountValue) || amountValue === 0) continue;
-      
-      transactions.push({
-        date,
-        description: description.trim(),
-        amount: -Math.abs(amountValue),
-        currency: 'UYU',
-        type: 'expense'
-      });
       continue;
     }
-    
-    // Patrón 2: PAGOS
-    // Ejemplo: "           14 04 26   PAGOS                                                                                        -172,36"
-    const match2 = line.match(/(\d{2})\s+(\d{2})\s+(\d{2})\s+PAGOS\s+(-?[\d,\.]+)/);
-    
-    if (line.includes('PAGOS')) {
-      console.log('💰 Línea con PAGOS:', line);
-      console.log('   Match2:', match2 ? 'SÍ' : 'NO');
-    }
-    
-    if (match2) {
-      console.log('✅ Match2 (PAGO) encontrado:', match2[0]);
-      const [, day, month, year, amount] = match2;
-      
-      const fullYear = 2000 + parseInt(year);
-      const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
-      if (isNaN(date.getTime())) continue;
-      
-      const cleanAmount = amount.replace(/\./g, '').replace(',', '.').replace('-', '');
-      const amountValue = parseFloat(cleanAmount);
-      
-      if (isNaN(amountValue) || amountValue === 0) continue;
-      
-      transactions.push({
-        date,
-        description: 'PAGO TARJETA DE CRÉDITO',
-        amount: Math.abs(amountValue),
-        currency: 'UYU',
-        type: 'income'
-      });
-      continue;
-    }
-    
-    // Patrón 3: AJUSTES y otros cargos especiales
-    // Ejemplo: "           25 04 26  5003    AJUSTE SEGURO SOBRE SDO                                                  -24,40"
-    const match3 = line.match(/(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{4})\s+(.+?)\s+(-?[\d,\.]+)\s*$/);
-    if (match3) {
-      const [, day, month, year, code, description, amount] = match3;
-      
-      const fullYear = 2000 + parseInt(year);
-      const date = new Date(fullYear, parseInt(month) - 1, parseInt(day));
-      if (isNaN(date.getTime())) continue;
-      
-      const cleanDesc = description.trim().replace(/\s+/g, ' ');
-      const isNegative = amount.startsWith('-');
-      const cleanAmount = amount.replace(/\./g, '').replace(',', '.').replace('-', '');
-      const amountValue = parseFloat(cleanAmount);
-      
-      if (isNaN(amountValue) || amountValue === 0) continue;
-      
-      // Ajustes negativos son créditos a favor
-      let type: TransactionType = 'expense';
-      let finalAmount = -Math.abs(amountValue);
-      
-      if (isNegative && cleanDesc.toUpperCase().includes('AJUSTE')) {
-        type = 'income';
-        finalAmount = Math.abs(amountValue);
+
+    // Una sola cifra → pesos. Dos cifras sin miles en la 1ª → origen + U$S → USD.
+    // Dos cifras con miles en la 1ª (28.610,65) → $ + U$S.
+    if (amounts.length === 1) {
+      const currency: Currency =
+        Math.abs(amounts[0]) < 1 && /AJUSTE/i.test(description) ? 'USD' : 'UYU';
+      pushTx(date, description, amounts[0], currency);
+    } else {
+      const firstToken = rest.match(moneyRe)?.[0] || '';
+      if (/^-?\d{1,3}(\.\d{3})+,\d{2}$/.test(firstToken.trim())) {
+        pushTx(date, description, amounts[0], 'UYU');
+        if (amounts[1]) pushTx(date, `${description} (USD)`, amounts[1], 'USD');
+      } else {
+        // Cobros en dólares (Importe U$S = última columna)
+        pushTx(date, description, amounts[amounts.length - 1], 'USD');
       }
-      
-      transactions.push({
-        date,
-        description: cleanDesc,
-        amount: finalAmount,
-        currency: 'UYU',
-        type
-      });
     }
   }
-  
+
+  // Cargos del pie (sin fecha): intereses / seguro — hasta SALDO CONTADO
+  const feesChunk = body.slice(matches.length ? matches[matches.length - 1].index : 0);
+  const feePatterns: Array<{ re: RegExp; name: string }> = [
+    { re: /INTERESES COMPENSATORIOS\s*\(IVA INC\)\s+(-?[\d\.]+,\d{2})(?:\s+(-?[\d\.]+,\d{2}))?/i, name: 'INTERESES COMPENSATORIOS (IVA INC)' },
+    { re: /INTERESES MORATORIOS\s*\(IVA INC\)\s+(-?[\d\.]+,\d{2})(?:\s+(-?[\d\.]+,\d{2}))?/i, name: 'INTERESES MORATORIOS (IVA INC)' },
+    { re: /SEGURO DE VIDA SOBRE SALDO\s+(-?[\d\.]+,\d{2})(?:\s+(-?[\d\.]+,\d{2}))?/i, name: 'SEGURO DE VIDA SOBRE SALDO' },
+  ];
+
+  for (const fee of feePatterns) {
+    const m = body.match(fee.re) || feesChunk.match(fee.re);
+    if (!m) continue;
+    const pesos = parseMoneyToken(m[1]);
+    const dollars = m[2] ? parseMoneyToken(m[2]) : null;
+    if (pesos) pushTx(fallbackDate, fee.name, pesos, 'UYU');
+    if (dollars) pushTx(fallbackDate, `${fee.name} (USD)`, dollars, 'USD');
+  }
+
   return transactions;
 };
 
