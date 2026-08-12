@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory, ensureReingresoIvaCategory } from '../../services/categories.service';
+import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory, ensureReingresoIvaCategory, clearAllSubcategories } from '../../services/categories.service';
 import { getTransactions } from '../../services/transactions.service';
 import { Category, Transaction } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { LoadingSpinner } from '../common/LoadingSpinner';
+import { isFixedCategory } from '../../utils/fixedCategories';
 
 export const CategoriesManagement = () => {
   const { user } = useAuth();
@@ -44,7 +45,8 @@ export const CategoriesManagement = () => {
       // Asegurar que existe la categoría de Transferencias Internas
       await ensureTransferCategory();
       await ensureReingresoIvaCategory();
-      
+      await clearAllSubcategories();
+
       const data = await getCategories();
       setCategories(data);
 
@@ -76,12 +78,16 @@ export const CategoriesManagement = () => {
     if (!user) return;
 
     try {
+      const category = categories.find(c => c.id === categoryId);
       const updates: Partial<Category> = {
-        name: editName,
         icon: editIcon,
         color: editColor,
-        keywords: editKeywords
+        keywords: editKeywords,
       };
+      // No renombrar categorías fijas del sistema
+      if (!category || !isFixedCategory(category)) {
+        updates.name = editName;
+      }
 
       await updateCategory(categoryId, updates);
       await loadCategories();
@@ -138,6 +144,12 @@ export const CategoriesManagement = () => {
   const handleDelete = (categoryId: string) => {
     if (!user) return;
 
+    const category = categories.find(c => c.id === categoryId);
+    if (category && isFixedCategory(category)) {
+      showWarning('Transferencias Internas es una categoría fija del sistema y no se puede eliminar.');
+      return;
+    }
+
     const count = transactionCounts[categoryId] || 0;
     if (count > 0) {
       showWarning(`No se puede eliminar esta categoría porque tiene ${count} transacciones asociadas.`);
@@ -154,25 +166,33 @@ export const CategoriesManagement = () => {
           await loadCategories();
         } catch (err) {
           console.error('Error al eliminar categoría:', err);
-          showError('Error al eliminar la categoría');
+          showError(err instanceof Error ? err.message : 'Error al eliminar la categoría');
         }
       },
     });
   };
 
   const getCategoryTypeLabel = (type: string) => {
-    return type === 'income' ? 'Ingreso' : 'Gasto';
+    if (type === 'income') return 'Ingreso';
+    if (type === 'transfer') return 'Transferencia';
+    return 'Gasto';
   };
 
   const getCategoryTypeColor = (type: string) => {
-    return type === 'income' 
-      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-      : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+    if (type === 'income') {
+      return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+    }
+    if (type === 'transfer') {
+      return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+    }
+    return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
   };
 
-  // Calcular totales
   const incomeCategories = categories.filter(c => c.type === 'income');
   const expenseCategories = categories.filter(c => c.type === 'expense');
+  const transferCategories = categories.filter(c => c.type === 'transfer');
+  const editingCategory = editingId ? categories.find(c => c.id === editingId) : null;
+  const editingIsFixed = editingCategory ? isFixedCategory(editingCategory) : false;
 
   if (loading) {
     return (
@@ -272,7 +292,7 @@ export const CategoriesManagement = () => {
       )}
 
       {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-3">
             <span className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -290,6 +310,16 @@ export const CategoriesManagement = () => {
             </span>
             <span className="px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400">
               {expenseCategories.length}
+            </span>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-lg font-semibold text-gray-900 dark:text-white">
+              Transferencias
+            </span>
+            <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+              {transferCategories.length}
             </span>
           </div>
         </div>
@@ -319,7 +349,8 @@ export const CategoriesManagement = () => {
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            disabled={editingIsFixed}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-60"
                           />
                         </div>
                         <div>
@@ -422,11 +453,6 @@ export const CategoriesManagement = () => {
                               <span className="text-xs text-gray-500 dark:text-gray-400">
                                 {transactionCounts[category.id] || 0} transacciones
                               </span>
-                              {category.subcategories && category.subcategories.length > 0 && (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  • {category.subcategories.length} subcategorías
-                                </span>
-                              )}
                             </div>
                             <div
                               className="mt-2 w-16 h-1 rounded-full"
@@ -441,13 +467,22 @@ export const CategoriesManagement = () => {
                           >
                             ✏️ Editar
                           </button>
-                          <button
-                            onClick={() => handleDelete(category.id)}
-                            className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            disabled={transactionCounts[category.id] > 0}
-                          >
-                            🗑️ Eliminar
-                          </button>
+                          {isFixedCategory(category) ? (
+                            <span
+                              className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
+                              title="Categoría fija del sistema"
+                            >
+                              🔒 Fija
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleDelete(category.id)}
+                              className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              disabled={transactionCounts[category.id] > 0}
+                            >
+                              🗑️ Eliminar
+                            </button>
+                          )}
                         </div>
                       </div>
                       
@@ -477,6 +512,192 @@ export const CategoriesManagement = () => {
           </div>
         )}
 
+        {/* Categorías de Transferencias (fijas del sistema) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+          <div className="bg-gray-100 dark:bg-gray-700/50 px-6 py-3 border-b border-gray-200 dark:border-gray-600">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              🔄 Transferencias
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Categoría fija del sistema · no se puede eliminar
+            </p>
+          </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {transferCategories.length === 0 ? (
+              <div className="p-6 text-sm text-gray-500 dark:text-gray-400">
+                Se está asegurando la categoría Transferencias Internas…
+              </div>
+            ) : (
+              transferCategories.map((category) => (
+                <div key={category.id} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  {editingId === category.id ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Nombre
+                          </label>
+                          <input
+                            type="text"
+                            value={editName}
+                            disabled
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-60"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Icono
+                          </label>
+                          <input
+                            type="text"
+                            value={editIcon}
+                            onChange={(e) => setEditIcon(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            maxLength={2}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Color
+                          </label>
+                          <input
+                            type="color"
+                            value={editColor}
+                            onChange={(e) => setEditColor(e.target.value)}
+                            className="w-full h-10 px-1 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Palabras clave (autoclasificación)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {editKeywords.map((keyword, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setEditKeywords(editKeywords.filter(k => k !== keyword))}
+                              className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                            >
+                              {keyword} ×
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newKeyword}
+                            onChange={(e) => setNewKeyword(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const kw = newKeyword.trim().toLowerCase();
+                                if (kw && !editKeywords.includes(kw)) {
+                                  setEditKeywords([...editKeywords, kw]);
+                                  setNewKeyword('');
+                                }
+                              }
+                            }}
+                            placeholder="Agregar palabra clave..."
+                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const kw = newKeyword.trim().toLowerCase();
+                              if (kw && !editKeywords.includes(kw)) {
+                                setEditKeywords([...editKeywords, kw]);
+                                setNewKeyword('');
+                              }
+                            }}
+                            className="px-3 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg"
+                          >
+                            Agregar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => handleSave(category.id)}
+                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{category.icon}</span>
+                          <div>
+                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                              {category.name}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${getCategoryTypeColor(category.type)}`}>
+                                {getCategoryTypeLabel(category.type)}
+                              </span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100">
+                                Fija
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {transactionCounts[category.id] || 0} transacciones
+                              </span>
+                            </div>
+                            <div
+                              className="mt-2 w-16 h-1 rounded-full"
+                              style={{ backgroundColor: category.color }}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => handleEdit(category)}
+                            className="px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                          >
+                            ✏️ Editar
+                          </button>
+                          <span
+                            className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
+                            title="Categoría fija del sistema"
+                          >
+                            🔒 Fija
+                          </span>
+                        </div>
+                      </div>
+                      {category.keywords && category.keywords.length > 0 && (
+                        <div className="mt-4 pl-12">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                            🔍 Palabras clave para categorización automática:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {category.keywords.map((keyword, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+                              >
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         {/* Categorías de Gastos */}
         {expenseCategories.length > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
@@ -499,7 +720,8 @@ export const CategoriesManagement = () => {
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            disabled={editingIsFixed}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-60"
                           />
                         </div>
                         <div>
@@ -602,11 +824,6 @@ export const CategoriesManagement = () => {
                               <span className="text-xs text-gray-500 dark:text-gray-400">
                                 {transactionCounts[category.id] || 0} transacciones
                               </span>
-                              {category.subcategories && category.subcategories.length > 0 && (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  • {category.subcategories.length} subcategorías
-                                </span>
-                              )}
                             </div>
                             <div
                               className="mt-2 w-16 h-1 rounded-full"
@@ -621,13 +838,22 @@ export const CategoriesManagement = () => {
                           >
                             ✏️ Editar
                           </button>
-                          <button
-                            onClick={() => handleDelete(category.id)}
-                            className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                            disabled={transactionCounts[category.id] > 0}
-                          >
-                            🗑️ Eliminar
-                          </button>
+                          {isFixedCategory(category) ? (
+                            <span
+                              className="px-3 py-1 text-sm text-gray-500 dark:text-gray-400"
+                              title="Categoría fija del sistema"
+                            >
+                              🔒 Fija
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleDelete(category.id)}
+                              className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                              disabled={transactionCounts[category.id] > 0}
+                            >
+                              🗑️ Eliminar
+                            </button>
+                          )}
                         </div>
                       </div>
                       

@@ -12,9 +12,9 @@ import {
   getCategories,
   addKeywordsToCategory,
   removeKeywordsFromCategory,
-  removeKeywordsFromSubcategory,
   ensureTransferCategory,
-  ensureReingresoIvaCategory
+  ensureReingresoIvaCategory,
+  clearAllSubcategories
 } from '../../services/categories.service';
 import {
   getUploadHistory,
@@ -97,7 +97,8 @@ export const TransactionList = () => {
       // Asegurar que existe la categoría de Transferencias Internas
       await ensureTransferCategory();
       await ensureReingresoIvaCategory();
-      
+      await clearAllSubcategories();
+
       const [txs, accs, cats] = await Promise.all([
         getTransactions(),
         getAccounts(),
@@ -353,15 +354,7 @@ export const TransactionList = () => {
 
   const handleRemoveMatchedKeyword = async (match: KeywordMatchInfo) => {
     try {
-      if (match.source === 'subcategory' && match.subcategoryId) {
-        await removeKeywordsFromSubcategory(
-          match.categoryId,
-          match.subcategoryId,
-          [match.keyword]
-        );
-      } else {
-        await removeKeywordsFromCategory(match.categoryId, [match.keyword]);
-      }
+      await removeKeywordsFromCategory(match.categoryId, [match.keyword]);
       const updatedCategories = await getCategories();
       setCategories(updatedCategories);
       showSuccess(`Se eliminó la regla “${match.keyword}” de ${match.sourceName}`);
@@ -456,19 +449,10 @@ export const TransactionList = () => {
         const result = categorizeTransaction(transaction.description, categories);
         
         if (result && result.categoryId) {
-          // Preparar actualización sin valores undefined
-          const updates: Partial<Transaction> = {
+          await updateTransaction(transaction.id, {
             category: result.categoryId,
             status: 'classified'
-          };
-          
-          // Solo agregar subcategory si existe
-          if (result.subcategoryId) {
-            updates.subcategory = result.subcategoryId;
-          }
-          
-          // Actualizar la transacción en Firebase
-          await updateTransaction(transaction.id, updates);
+          });
           categorizedCount++;
         }
       }

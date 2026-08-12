@@ -121,7 +121,7 @@ export const TransactionCategorizeModal = ({
 
   const handleRemoveMatchedKeyword = async (match: KeywordMatchInfo) => {
     if (!onRemoveKeyword) return;
-    const key = `${match.categoryId}:${match.subcategoryId || ''}:${match.keyword}`;
+    const key = `${match.categoryId}:${match.keyword}`;
     setRemovingKeyword(key);
     try {
       await onRemoveKeyword(match);
@@ -236,7 +236,7 @@ export const TransactionCategorizeModal = ({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {matchedPattern.matchedKeywords.map(match => {
-                    const key = `${match.categoryId}:${match.subcategoryId || ''}:${match.keyword}`;
+                    const key = `${match.categoryId}:${match.keyword}`;
                     const removing = removingKeyword === key;
                     return (
                       <span

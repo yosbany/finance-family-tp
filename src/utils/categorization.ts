@@ -227,17 +227,15 @@ const calculateLevenshteinSimilarity = (str1: string, str2: string): number => {
 
 export interface KeywordMatchInfo {
   keyword: string;
-  source: 'category' | 'subcategory';
+  source: 'category';
   sourceName: string;
   categoryId: string;
-  subcategoryId?: string;
   matchType: 'exact' | 'partial' | 'regex' | 'fuzzy';
   score: number;
 }
 
 export interface CategorizationResult {
   categoryId: string;
-  subcategoryId?: string;
   confidence: number;
   matchedKeywords: KeywordMatchInfo[];
 }
@@ -256,7 +254,6 @@ export const categorizeTransaction = (
 
   interface Match {
     categoryId: string;
-    subcategoryId?: string;
     score: number;
     matchedKeywords: KeywordMatchInfo[];
   }
@@ -266,18 +263,13 @@ export const categorizeTransaction = (
   for (const category of categories) {
     let categoryScore = 0;
     const matchedKeywords: KeywordMatchInfo[] = [];
-    let bestSubcategoryMatch: {
-      id: string;
-      score: number;
-      keywords: KeywordMatchInfo[];
-    } | null = null;
 
     if (category.keywords && Array.isArray(category.keywords)) {
       for (const keyword of category.keywords) {
         const result = matchKeyword(normalizedDesc, keyword);
         if (result.matches) {
           categoryScore += result.score;
-          if (!matchedKeywords.some(m => m.keyword === keyword && m.source === 'category')) {
+          if (!matchedKeywords.some(m => m.keyword === keyword)) {
             matchedKeywords.push({
               keyword,
               source: 'category',
@@ -295,7 +287,7 @@ export const categorizeTransaction = (
           if (ngramResult.matches) {
             const score = ngramResult.score * 0.8;
             categoryScore += score;
-            if (!matchedKeywords.some(m => m.keyword === keyword && m.source === 'category')) {
+            if (!matchedKeywords.some(m => m.keyword === keyword)) {
               matchedKeywords.push({
                 keyword,
                 source: 'category',
@@ -311,72 +303,11 @@ export const categorizeTransaction = (
       }
     }
 
-    if (category.subcategories && Array.isArray(category.subcategories)) {
-      for (const subcategory of category.subcategories) {
-        if (subcategory.keywords && Array.isArray(subcategory.keywords)) {
-          let subcategoryScore = 0;
-          const subcategoryKeywords: KeywordMatchInfo[] = [];
-
-          for (const subKeyword of subcategory.keywords) {
-            const result = matchKeyword(normalizedDesc, subKeyword);
-            if (result.matches) {
-              const score = result.score * 1.5;
-              subcategoryScore += score;
-              if (!subcategoryKeywords.some(m => m.keyword === subKeyword)) {
-                subcategoryKeywords.push({
-                  keyword: subKeyword,
-                  source: 'subcategory',
-                  sourceName: subcategory.name,
-                  categoryId: category.id,
-                  subcategoryId: subcategory.id,
-                  matchType: result.matchType,
-                  score: Math.floor(score),
-                });
-              }
-              continue;
-            }
-
-            for (const ngram of [...bigrams, ...trigrams]) {
-              const ngramResult = matchKeyword(ngram, subKeyword);
-              if (ngramResult.matches) {
-                const score = ngramResult.score * 1.2;
-                subcategoryScore += score;
-                if (!subcategoryKeywords.some(m => m.keyword === subKeyword)) {
-                  subcategoryKeywords.push({
-                    keyword: subKeyword,
-                    source: 'subcategory',
-                    sourceName: subcategory.name,
-                    categoryId: category.id,
-                    subcategoryId: subcategory.id,
-                    matchType: ngramResult.matchType,
-                    score: Math.floor(score),
-                  });
-                }
-                break;
-              }
-            }
-          }
-
-          if (subcategoryScore > 0 && (!bestSubcategoryMatch || subcategoryScore > bestSubcategoryMatch.score)) {
-            bestSubcategoryMatch = {
-              id: subcategory.id,
-              score: subcategoryScore,
-              keywords: subcategoryKeywords,
-            };
-          }
-        }
-      }
-    }
-
-    if (categoryScore > 0 || bestSubcategoryMatch) {
+    if (categoryScore > 0) {
       matches.push({
         categoryId: category.id,
-        subcategoryId: bestSubcategoryMatch?.id,
-        score: categoryScore + (bestSubcategoryMatch?.score || 0),
-        matchedKeywords: [
-          ...matchedKeywords,
-          ...(bestSubcategoryMatch?.keywords || []),
-        ],
+        score: categoryScore,
+        matchedKeywords,
       });
     }
   }
@@ -391,7 +322,6 @@ export const categorizeTransaction = (
 
   return {
     categoryId: bestMatch.categoryId,
-    subcategoryId: bestMatch.subcategoryId,
     confidence,
     matchedKeywords: bestMatch.matchedKeywords.sort((a, b) => b.score - a.score),
   };
@@ -429,23 +359,6 @@ export const explainDescriptionMatch = (
       }
     }
 
-    for (const subcategory of preferred.subcategories || []) {
-      for (const keyword of subcategory.keywords || []) {
-        const match = matchKeyword(normalizedDesc, keyword);
-        if (match.matches) {
-          matchedKeywords.push({
-            keyword,
-            source: 'subcategory',
-            sourceName: subcategory.name,
-            categoryId: preferred.id,
-            subcategoryId: subcategory.id,
-            matchType: match.matchType,
-            score: Math.floor(match.score * 1.5),
-          });
-        }
-      }
-    }
-
     if (matchedKeywords.length === 0) return result;
 
     return {
@@ -477,7 +390,6 @@ export const categorizeTransactions = (
       return {
         ...transaction,
         category: result.categoryId,
-        subcategory: result.subcategoryId,
         status: 'classified'
       };
     }
@@ -513,8 +425,7 @@ export const suggestCategory = (
   description: string,
   previousTransactions: Transaction[],
   categories: Category[]
-): { categoryId: string; subcategoryId?: string; confidence: number } | null => {
-  const normalizedDesc = normalizeText(description);
+): { categoryId: string; confidence: number } | null => {
   const tokens = tokenize(description);
 
   // Buscar transacciones similares que ya estén categorizadas
@@ -535,7 +446,6 @@ export const suggestCategory = (
   const mostSimilar = similarTransactions[0];
   return {
     categoryId: mostSimilar.transaction.category!,
-    subcategoryId: mostSimilar.transaction.subcategory,
     confidence: mostSimilar.similarity
   };
 };
@@ -582,10 +492,9 @@ export const learnFromManualClassification = (
     ...entities.codes,
   ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
 
-  const allKeywords = [
-    ...(category.keywords ?? []),
-    ...(category.subcategories ?? []).flatMap(sub => sub.keywords ?? []),
-  ].filter((keyword): keyword is string => typeof keyword === 'string' && keyword.length > 0);
+  const allKeywords = (category.keywords ?? []).filter(
+    (keyword): keyword is string => typeof keyword === 'string' && keyword.length > 0
+  );
 
   const newKeywords = candidates.filter(candidate => {
     return !allKeywords.some(keyword => {

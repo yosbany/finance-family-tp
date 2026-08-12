@@ -102,7 +102,6 @@ export interface Rule {
   id: string;
   keyword: string;
   categoryId: string;
-  subcategoryId?: string;
   priority: number;
 }
 

@@ -213,13 +213,11 @@ export const deleteAllTransactions = async (): Promise<number> => {
 
 export const classifyTransaction = async (
   transactionId: string,
-  categoryId: string,
-  subcategoryId?: string
+  categoryId: string
 ): Promise<void> => {
   try {
     await updateTransaction(transactionId, {
       category: categoryId,
-      subcategory: subcategoryId,
       status: 'classified'
     });
   } catch (error) {
