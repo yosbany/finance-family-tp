@@ -105,6 +105,7 @@ export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
       'Subí ese PDF acá: BHU → Débito.',
     ],
     tips: [
+      'Cuenta por snapshot: no es mensual; cada PDF reemplaza el estado anterior.',
       'Usá solo el PDF del estado de cuenta (texto), no una captura o escaneo.',
       'Algunos extractos BHU usan UI (Unidades Indexadas); la app intenta interpretarlos.',
     ],
@@ -124,6 +125,7 @@ export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
       'Subí el archivo acá: IBM → Inversión.',
     ],
     tips: [
+      'Cuenta por snapshot: no es mensual; cada Excel reemplaza el estado anterior de IBM.',
       'Usá el reporte de detalles de cartera (compras y valores), no un resumen PDF escaneado.',
     ],
   },

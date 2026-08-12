@@ -5,8 +5,8 @@ import { useModal } from '../../hooks/useModal';
 import { getAccounts, recalculateAccountBalance } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
-import { createTransactions, parsedToTransaction } from '../../services/transactions.service';
-import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory } from '../../services/uploadHistory.service';
+import { createTransactions, parsedToTransaction, deleteTransactionsByFilter } from '../../services/transactions.service';
+import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory, deleteUploadHistoryByFilter } from '../../services/uploadHistory.service';
 import { calculateFileHash } from '../../parsers/fileHasher';
 import { parseCSV } from '../../parsers/csvParser';
 import { parseExcel } from '../../parsers/excelParser';
@@ -15,6 +15,7 @@ import { parseByBank, detectBank, getParserInfo } from '../../parsers/banks';
 import { categorizeTransactions } from '../../utils/categorization';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { getBankDownloadGuide } from '../../utils/bankDownloadGuides';
+import { isSnapshotBank, SNAPSHOT_STATEMENT_MONTH } from '../../utils/snapshotBanks';
 import { Account, Category, Transaction, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
@@ -262,8 +263,9 @@ export const UploadStatements = () => {
       // 1. Calcular hash del archivo
       const fileHash = await calculateFileHash(file);
 
-      // 2. Verificar si ya fue cargado (a menos que se fuerce la recarga)
-      if (!forceUpload) {
+      // 2. Verificar si ya fue cargado (mensuales). Snapshots se reemplazan a propósito.
+      const accountForDup = accounts.find(a => a.id === selectedAccount);
+      if (!forceUpload && accountForDup && !isSnapshotBank(accountForDup.bank)) {
         const isDuplicate = await checkDuplicateUpload(fileHash);
         if (isDuplicate) {
           setResult({
@@ -331,32 +333,39 @@ export const UploadStatements = () => {
         return;
       }
 
-      // 5. Validar fechas de transacciones (solo para bancos que requieren período)
+      // 5. Validar fechas / preparar snapshot
       const warnings: string[] = [];
-      const requiresPeriod = selectedBank !== 'BHU' && selectedBank !== 'IBM';
-      
-      if (requiresPeriod) {
+      const snapshotMode = isSnapshotBank(account.bank);
+
+      if (!snapshotMode) {
         let transactionsOutOfRange = 0;
-        
+
         parsedTransactions.forEach(pt => {
           const txDate = new Date(pt.date);
           const txMonth = txDate.getMonth() + 1;
           const txYear = txDate.getFullYear();
-          
+
           if (txMonth !== statementMonth || txYear !== statementYear) {
             transactionsOutOfRange++;
           }
         });
-        
+
         if (transactionsOutOfRange > 0) {
           warnings.push(
             `⚠️ ${transactionsOutOfRange} transacción(es) tienen fechas fuera del período seleccionado (${statementMonth}/${statementYear}). Verifica que sea el extracto correcto.`
           );
         }
+      } else {
+        // Snapshot: reemplaza el estado anterior de la cuenta (BHU / IBM no son mensuales)
+        await deleteTransactionsByFilter({ accountId: selectedAccount });
+        await deleteUploadHistoryByFilter({ accountId: selectedAccount });
+        warnings.push(
+          'Esta cuenta usa snapshot: se reemplazó el estado anterior con este extracto completo.'
+        );
       }
 
       // 6. Crear registro de carga
-      // Para BHU e IBM, usar el mes/año actual ya que no se requiere período específico
+      const uploadNow = new Date();
       const uploadId = await createUploadHistory({
         fileName: file.name,
         fileHash,
@@ -365,8 +374,9 @@ export const UploadStatements = () => {
         accountId: selectedAccount,
         transactionsCount: parsedTransactions.length,
         status: 'processed',
-        statementMonth: requiresPeriod ? statementMonth : currentDate.getMonth() + 1,
-        statementYear: requiresPeriod ? statementYear : currentDate.getFullYear()
+        statementMonth: snapshotMode ? SNAPSHOT_STATEMENT_MONTH : statementMonth,
+        statementYear: snapshotMode ? uploadNow.getFullYear() : statementYear,
+        mode: snapshotMode ? 'snapshot' : 'monthly',
       });
 
       // 7. Convertir a transacciones
@@ -489,6 +499,10 @@ export const UploadStatements = () => {
     }
 
     uploadHistory.forEach(upload => {
+      // Ignorar cargas snapshot (mes 0) en el calendario mensual
+      if (upload.mode === 'snapshot' || upload.statementMonth < 1 || upload.statementMonth > 12) {
+        return;
+      }
       periodKeys.add(`${upload.statementYear}-${String(upload.statementMonth).padStart(2, '0')}`);
     });
 
@@ -501,9 +515,35 @@ export const UploadStatements = () => {
       });
   }, [uploadHistory]);
 
+  const monthlyAccounts = useMemo(
+    () => accounts.filter(account => !isSnapshotBank(account.bank)),
+    [accounts]
+  );
+
+  const snapshotAccounts = useMemo(
+    () => accounts.filter(account => isSnapshotBank(account.bank)),
+    [accounts]
+  );
+
+  const latestSnapshotByAccount = useMemo(() => {
+    const map = new Map<string, UploadHistory>();
+    uploadHistory.forEach(upload => {
+      const account = accounts.find(a => a.id === upload.accountId);
+      if (!account || !isSnapshotBank(account.bank)) return;
+      const existing = map.get(upload.accountId);
+      if (!existing || upload.uploadDate > existing.uploadDate) {
+        map.set(upload.accountId, upload);
+      }
+    });
+    return map;
+  }, [uploadHistory, accounts]);
+
   const uploadByAccountPeriod = useMemo(() => {
     const map = new Map<string, UploadHistory>();
     uploadHistory.forEach(upload => {
+      if (upload.mode === 'snapshot' || upload.statementMonth < 1 || upload.statementMonth > 12) {
+        return;
+      }
       map.set(`${upload.statementYear}-${upload.statementMonth}-${upload.accountId}`, upload);
     });
     return map;
@@ -515,7 +555,7 @@ export const UploadStatements = () => {
     const term = trackingSearch.toLowerCase().trim();
 
     trackingPeriods.forEach(({ year, month }) => {
-      accounts.forEach(account => {
+      monthlyAccounts.forEach(account => {
         if (term) {
           const matches =
             account.name.toLowerCase().includes(term) ||
@@ -528,8 +568,28 @@ export const UploadStatements = () => {
         else missing++;
       });
     });
+
+    snapshotAccounts.forEach(account => {
+      if (term) {
+        const matches =
+          account.name.toLowerCase().includes(term) ||
+          account.bank.toLowerCase().includes(term) ||
+          account.owner.toLowerCase().includes(term);
+        if (!matches) return;
+      }
+      if (latestSnapshotByAccount.has(account.id)) uploaded++;
+      else missing++;
+    });
+
     return { uploaded, missing };
-  }, [trackingPeriods, accounts, uploadByAccountPeriod, trackingSearch]);
+  }, [
+    trackingPeriods,
+    monthlyAccounts,
+    snapshotAccounts,
+    uploadByAccountPeriod,
+    latestSnapshotByAccount,
+    trackingSearch,
+  ]);
 
   if (loading) {
     return (
@@ -558,7 +618,7 @@ export const UploadStatements = () => {
   };
 
   const getPeriodEntries = (year: number, month: number): TrackingEntry[] => {
-    return accounts
+    return monthlyAccounts
       .map(account => {
         const upload = uploadByAccountPeriod.get(`${year}-${month}-${account.id}`);
         const noMovements = upload?.status === 'no_movements';
@@ -577,6 +637,33 @@ export const UploadStatements = () => {
         if (trackingStatusFilter === 'missing') return !entry.covered;
         return true;
       });
+  };
+
+  const snapshotEntries = snapshotAccounts
+    .map(account => {
+      const upload = latestSnapshotByAccount.get(account.id);
+      const hasExtract = upload?.status === 'processed' || (!!upload && upload.transactionsCount > 0);
+      return {
+        account,
+        covered: !!upload,
+        upload,
+        noMovements: false,
+        hasExtract: !!upload && hasExtract,
+      };
+    })
+    .filter(entry => matchesTrackingSearch(entry.account))
+    .filter(entry => {
+      if (trackingStatusFilter === 'uploaded') return entry.covered;
+      if (trackingStatusFilter === 'missing') return !entry.covered;
+      return true;
+    });
+
+  const startSnapshotUpload = (account: Account) => {
+    setSelectedBank(account.bank);
+    setSelectedAccountType(account.type);
+    setSelectedAccount(account.id);
+    setCurrentStep(4);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -830,8 +917,8 @@ export const UploadStatements = () => {
 
               {selectedBank && <BankDownloadHelp bank={selectedBank} />}
 
-              {/* Selector de Mes/Año del Extracto - Solo para bancos que lo requieren */}
-              {selectedBank !== 'BHU' && selectedBank !== 'IBM' && (
+              {/* Selector de Mes/Año — solo extractos mensuales */}
+              {selectedBank && !isSnapshotBank(selectedBank) && (
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
                   <label className="label text-yellow-900 dark:text-yellow-200 mb-3">
                     📅 Período del Extracto (Mes/Año)
@@ -881,7 +968,19 @@ export const UploadStatements = () => {
                     ⚠️ Importante: Selecciona el mes y año correcto del extracto. Se validarán las fechas de las transacciones.
                   </p>
                 </div>
-                )}
+              )}
+
+              {selectedBank && isSnapshotBank(selectedBank) && (
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                  <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+                    Cuenta por snapshot (no mensual)
+                  </p>
+                  <p className="text-xs text-indigo-800 dark:text-indigo-300 mt-1">
+                    BHU e IBM se actualizan cuando quieras: cada carga reemplaza el estado anterior de la cuenta
+                    con el extracto completo (no se pide mes).
+                  </p>
+                </div>
+              )}
                 
                 <div>
                 <label className="label">
@@ -1000,7 +1099,7 @@ export const UploadStatements = () => {
             📊 Seguimiento de Extractos Subidos
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Revisa qué extractos has subido por mes/año para cada banco y cuenta
+            Extractos mensuales por mes/año, y snapshots (BHU / IBM) por última actualización
           </p>
 
           {/* Filtros */}
@@ -1046,6 +1145,113 @@ export const UploadStatements = () => {
           </div>
 
           <div className="space-y-4">
+            {snapshotEntries.length > 0 && (
+              <div className="border border-indigo-200 dark:border-indigo-800 rounded-lg p-4 bg-indigo-50/40 dark:bg-indigo-900/10">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900 dark:text-white">
+                    📷 Snapshots (BHU / IBM)
+                  </h4>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {snapshotEntries.filter(e => e.covered).length}/{snapshotEntries.length} actualizados
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-800 dark:text-indigo-300 mb-3">
+                  No van por mes: actualizá cuando quieras. Cada carga reemplaza el estado anterior.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {snapshotEntries.map(({ account, covered, upload, hasExtract }) => (
+                    <div
+                      key={`snapshot-${account.id}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => hasExtract && upload && handleUploadedClick(upload)}
+                      onDoubleClick={() => {
+                        if (!covered) startSnapshotUpload(account);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && hasExtract && upload) handleUploadedClick(upload);
+                        if (e.key === 'Enter' && !covered) startSnapshotUpload(account);
+                      }}
+                      className={`p-3 rounded-lg border transition-all ${
+                        hasExtract
+                          ? `${getOwnerCardClasses(account.owner, owners)} cursor-pointer hover:ring-2 hover:ring-green-400/60 hover:shadow-sm`
+                          : 'bg-orange-50 dark:bg-orange-900/10 border-dashed border-orange-300 dark:border-orange-700'
+                      }`}
+                      title={
+                        hasExtract
+                          ? 'Clic para ver transacciones del último snapshot'
+                          : 'Doble clic para cargar / actualizar snapshot'
+                      }
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">
+                              {account.type === 'investment' ? '📈' : '💳'}
+                            </span>
+                            <span className="font-medium text-sm text-gray-900 dark:text-white">
+                              {account.bank}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                            {account.name}
+                          </p>
+                          <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${getOwnerBadgeClasses(account.owner, owners)}`}>
+                            {account.owner}
+                          </span>
+                          {hasExtract && upload ? (
+                            <>
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                Última act.: {new Date(upload.uploadDate).toLocaleString('es-UY')}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                {upload.fileName} · {upload.transactionsCount} mov.
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium">
+                                Sin snapshot aún
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startSnapshotUpload(account);
+                                }}
+                                className="text-xs text-primary hover:underline mt-1 block"
+                              >
+                                Cargar snapshot
+                              </button>
+                            </>
+                          )}
+                          {hasExtract && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startSnapshotUpload(account);
+                              }}
+                              className="text-xs text-primary hover:underline mt-1 block"
+                            >
+                              Actualizar snapshot
+                            </button>
+                          )}
+                        </div>
+                        <span
+                          className={`text-xl flex-shrink-0 ${
+                            hasExtract ? 'text-green-500' : 'text-orange-400'
+                          }`}
+                        >
+                          {covered ? '✓' : '☐'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {trackingPeriods.map(({ key, year, month }) => {
               const entries = getPeriodEntries(year, month);
               if (entries.length === 0) return null;
@@ -1155,7 +1361,8 @@ export const UploadStatements = () => {
             })}
           </div>
 
-          {trackingPeriods.every(({ year, month }) => getPeriodEntries(year, month).length === 0) && (
+          {trackingPeriods.every(({ year, month }) => getPeriodEntries(year, month).length === 0) &&
+            snapshotEntries.length === 0 && (
             <p className="text-center text-gray-500 dark:text-gray-400 py-6">
               No hay resultados para los filtros aplicados
             </p>
@@ -1163,7 +1370,8 @@ export const UploadStatements = () => {
 
           <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-300">
-              💡 <strong>Tip:</strong> Clic en extractos subidos (✓ verde) para ver transacciones. Doble clic en faltantes (☐) para cargar. Si no hubo movimientos, usa &quot;Marcar sin movimientos&quot; (✓ azul).
+              💡 <strong>Tip:</strong> Mensuales: clic en ✓ para ver, doble clic en ☐ para cargar, o “sin movimientos”.
+              Snapshots (BHU/IBM): actualizá cuando quieras; cada carga reemplaza el estado anterior.
             </p>
           </div>
         </div>

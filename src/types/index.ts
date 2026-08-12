@@ -116,8 +116,11 @@ export interface UploadHistory {
   transactionsCount: number;
   status: UploadStatus;
   errorMessage?: string;
-  statementMonth: number; // 1-12
-  statementYear: number; // e.g., 2024
+  /** 1-12 para extractos mensuales; 0 = snapshot (BHU/IBM). */
+  statementMonth: number;
+  statementYear: number;
+  /** monthly = extracto de un mes; snapshot = estado completo al momento de la carga. */
+  mode?: 'monthly' | 'snapshot';
 }
 
 export interface ParsedTransaction {

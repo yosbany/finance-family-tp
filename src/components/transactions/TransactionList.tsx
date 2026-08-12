@@ -720,7 +720,10 @@ export const TransactionList = () => {
               📄 Extracto: {uploadAccount ? `${uploadAccount.bank} · ${uploadAccount.name}` : 'Cargando...'}
               {uploadInfo && (
                 <span className="font-normal text-blue-700 dark:text-blue-300">
-                  {' '}— {monthNames[uploadInfo.statementMonth - 1]} {uploadInfo.statementYear}
+                  {' '}—{' '}
+                  {uploadInfo.mode === 'snapshot' || uploadInfo.statementMonth < 1
+                    ? `Snapshot · ${new Date(uploadInfo.uploadDate).toLocaleString('es-UY')}`
+                    : `${monthNames[uploadInfo.statementMonth - 1]} ${uploadInfo.statementYear}`}
                   {uploadInfo.fileName && ` · ${uploadInfo.fileName}`}
                 </span>
               )}
