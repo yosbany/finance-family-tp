@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Transaction, Account, Category } from '../../types';
-import { explainDescriptionMatch, learnFromManualClassification } from '../../utils/categorization';
+import {
+  explainDescriptionMatch,
+  learnFromManualClassification,
+  KeywordMatchInfo,
+} from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
 interface TransactionCategorizeModalProps {
@@ -10,6 +14,7 @@ interface TransactionCategorizeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (categoryId: string, keywords: string[]) => Promise<void>;
+  onRemoveKeyword?: (match: KeywordMatchInfo) => Promise<void>;
   getCategoryName: (categoryId: string) => string;
   getCategoryColor: (categoryId: string) => string;
 }
@@ -28,6 +33,7 @@ export const TransactionCategorizeModal = ({
   isOpen,
   onClose,
   onSave,
+  onRemoveKeyword,
   getCategoryName,
   getCategoryColor,
 }: TransactionCategorizeModalProps) => {
@@ -36,6 +42,7 @@ export const TransactionCategorizeModal = ({
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [customKeyword, setCustomKeyword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [removingKeyword, setRemovingKeyword] = useState<string | null>(null);
   const [addRules, setAddRules] = useState(true);
 
   useEffect(() => {
@@ -109,6 +116,17 @@ export const TransactionCategorizeModal = ({
       onClose();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRemoveMatchedKeyword = async (match: KeywordMatchInfo) => {
+    if (!onRemoveKeyword) return;
+    const key = `${match.categoryId}:${match.subcategoryId || ''}:${match.keyword}`;
+    setRemovingKeyword(key);
+    try {
+      await onRemoveKeyword(match);
+    } finally {
+      setRemovingKeyword(null);
     }
   };
 
@@ -211,25 +229,41 @@ export const TransactionCategorizeModal = ({
                   Patrón que coincidió
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2">
-                  Regla(s) de autoclasificación que matchean esta descripción
+                  Regla(s) de la categoría que matchean esta descripción. Podés eliminarlas acá.
                   {matchedPattern.confidence > 0
                     ? ` · confianza ${(matchedPattern.confidence * 100).toFixed(0)}%`
                     : ''}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {matchedPattern.matchedKeywords.map(match => (
-                    <span
-                      key={`${match.source}-${match.sourceName}-${match.keyword}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
-                      title={`En ${match.sourceName} (${matchTypeLabel[match.matchType] || match.matchType})`}
-                    >
-                      <span className="font-semibold">“{match.keyword}”</span>
-                      <span className="opacity-70">
-                        → {match.sourceName}
-                        {match.matchType !== 'exact' ? ` · ${matchTypeLabel[match.matchType]}` : ''}
+                  {matchedPattern.matchedKeywords.map(match => {
+                    const key = `${match.categoryId}:${match.subcategoryId || ''}:${match.keyword}`;
+                    const removing = removingKeyword === key;
+                    return (
+                      <span
+                        key={key}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
+                        title={`En ${match.sourceName} (${matchTypeLabel[match.matchType] || match.matchType})`}
+                      >
+                        <span className="font-semibold">“{match.keyword}”</span>
+                        <span className="opacity-70">
+                          → {match.sourceName}
+                          {match.matchType !== 'exact' ? ` · ${matchTypeLabel[match.matchType]}` : ''}
+                        </span>
+                        {onRemoveKeyword && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveMatchedKeyword(match)}
+                            disabled={removing || !!removingKeyword}
+                            className="ml-0.5 rounded px-1 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200/80 dark:hover:bg-emerald-800/60 disabled:opacity-50"
+                            aria-label={`Eliminar patrón ${match.keyword} de ${match.sourceName}`}
+                            title="Eliminar esta regla de la categoría"
+                          >
+                            {removing ? '…' : '×'}
+                          </button>
+                        )}
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

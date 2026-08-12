@@ -229,6 +229,8 @@ export interface KeywordMatchInfo {
   keyword: string;
   source: 'category' | 'subcategory';
   sourceName: string;
+  categoryId: string;
+  subcategoryId?: string;
   matchType: 'exact' | 'partial' | 'regex' | 'fuzzy';
   score: number;
 }
@@ -280,6 +282,7 @@ export const categorizeTransaction = (
               keyword,
               source: 'category',
               sourceName: category.name,
+              categoryId: category.id,
               matchType: result.matchType,
               score: result.score,
             });
@@ -297,6 +300,7 @@ export const categorizeTransaction = (
                 keyword,
                 source: 'category',
                 sourceName: category.name,
+                categoryId: category.id,
                 matchType: ngramResult.matchType,
                 score: Math.floor(score),
               });
@@ -323,6 +327,8 @@ export const categorizeTransaction = (
                   keyword: subKeyword,
                   source: 'subcategory',
                   sourceName: subcategory.name,
+                  categoryId: category.id,
+                  subcategoryId: subcategory.id,
                   matchType: result.matchType,
                   score: Math.floor(score),
                 });
@@ -340,6 +346,8 @@ export const categorizeTransaction = (
                     keyword: subKeyword,
                     source: 'subcategory',
                     sourceName: subcategory.name,
+                    categoryId: category.id,
+                    subcategoryId: subcategory.id,
                     matchType: ngramResult.matchType,
                     score: Math.floor(score),
                   });
@@ -414,6 +422,7 @@ export const explainDescriptionMatch = (
           keyword,
           source: 'category',
           sourceName: preferred.name,
+          categoryId: preferred.id,
           matchType: match.matchType,
           score: match.score,
         });
@@ -428,6 +437,8 @@ export const explainDescriptionMatch = (
             keyword,
             source: 'subcategory',
             sourceName: subcategory.name,
+            categoryId: preferred.id,
+            subcategoryId: subcategory.id,
             matchType: match.matchType,
             score: Math.floor(match.score * 1.5),
           });

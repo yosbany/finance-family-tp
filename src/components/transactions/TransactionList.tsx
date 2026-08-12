@@ -11,6 +11,8 @@ import { getAccounts, recalculateAccountBalance, recalculateAllAccountBalances }
 import {
   getCategories,
   addKeywordsToCategory,
+  removeKeywordsFromCategory,
+  removeKeywordsFromSubcategory,
   ensureTransferCategory,
   ensureReingresoIvaCategory
 } from '../../services/categories.service';
@@ -24,7 +26,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { TransactionCategorizeModal } from './TransactionCategorizeModal';
-import { categorizeTransaction } from '../../utils/categorization';
+import { categorizeTransaction, KeywordMatchInfo } from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
 export const TransactionList = () => {
@@ -345,6 +347,27 @@ export const TransactionList = () => {
     } catch (err) {
       console.error('Error al categorizar transacción:', err);
       showError('Error al guardar los cambios');
+      throw err;
+    }
+  };
+
+  const handleRemoveMatchedKeyword = async (match: KeywordMatchInfo) => {
+    try {
+      if (match.source === 'subcategory' && match.subcategoryId) {
+        await removeKeywordsFromSubcategory(
+          match.categoryId,
+          match.subcategoryId,
+          [match.keyword]
+        );
+      } else {
+        await removeKeywordsFromCategory(match.categoryId, [match.keyword]);
+      }
+      const updatedCategories = await getCategories();
+      setCategories(updatedCategories);
+      showSuccess(`Se eliminó la regla “${match.keyword}” de ${match.sourceName}`);
+    } catch (err) {
+      console.error('Error al eliminar patrón:', err);
+      showError('No se pudo eliminar la regla');
       throw err;
     }
   };
@@ -1031,6 +1054,7 @@ export const TransactionList = () => {
         isOpen={showCategorizeModal}
         onClose={closeCategorizeModal}
         onSave={handleModalSave}
+        onRemoveKeyword={handleRemoveMatchedKeyword}
         getCategoryName={getCategoryName}
         getCategoryColor={getCategoryColor}
       />

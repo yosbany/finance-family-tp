@@ -367,8 +367,9 @@ export const removeKeywordsFromCategory = async (
       throw new Error('Categoría no encontrada');
     }
 
+    const toRemove = new Set(keywordsToRemove.map(k => k.toLowerCase()));
     const updatedKeywords = category.keywords.filter(
-      keyword => !keywordsToRemove.includes(keyword)
+      keyword => !toRemove.has(keyword.toLowerCase())
     );
 
     await updateCategory(categoryId, {
@@ -394,11 +395,12 @@ export const removeKeywordsFromSubcategory = async (
       throw new Error('Categoría no encontrada');
     }
 
+    const toRemove = new Set(keywordsToRemove.map(k => k.toLowerCase()));
     const updatedSubcategories = category.subcategories.map(sub => {
       if (sub.id === subcategoryId) {
         return {
           ...sub,
-          keywords: sub.keywords.filter(keyword => !keywordsToRemove.includes(keyword))
+          keywords: sub.keywords.filter(keyword => !toRemove.has(keyword.toLowerCase()))
         };
       }
       return sub;
