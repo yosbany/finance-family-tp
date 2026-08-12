@@ -1,57 +1,92 @@
-import { ParsedTransaction, Currency, TransactionType } from '../../types';
+import { ParsedTransaction, TransactionType } from '../../types';
 
 /**
  * Parser para extractos del BROU (Banco República Oriental del Uruguay)
- * Soporta formatos CSV y PDF de cuentas de débito y tarjetas de crédito
+ * Soporta formatos CSV y Excel de conciliación / movimientos
  */
+
+const parseBROUDate = (fecha: unknown): Date | null => {
+  if (typeof fecha === 'number') {
+    const date = new Date((fecha - 25569) * 86400 * 1000);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof fecha !== 'string') return null;
+  const [day, month, year] = fecha.trim().split(/[/-]/);
+  if (!day || !month || !year) return null;
+  const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+  return isNaN(date.getTime()) ? null : date;
+};
+
+const parseBROUAmount = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value) && value !== 0) {
+    return Math.abs(value);
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
+  // BROU suele usar punto decimal; a veces miles con punto y decimal con coma
+  const raw = value.trim().replace(/\s/g, '');
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+  const n = Number(normalized);
+  return Number.isFinite(n) && n !== 0 ? Math.abs(n) : null;
+};
+
+const isBalanceOrNoiseRow = (description: string): boolean => {
+  const d = description.toLowerCase();
+  return (
+    d.includes('saldo inicial') ||
+    d.includes('saldo final') ||
+    d.includes('total') ||
+    d === 'movimientos' ||
+    d.startsWith('esta información')
+  );
+};
 
 export const parseBROUDebitCSV = (content: string): ParsedTransaction[] => {
   const lines = content.split('\n').filter(line => line.trim());
   const transactions: ParsedTransaction[] = [];
 
-  // BROU formato típico: Fecha,Descripción,Débito,Crédito,Saldo
-  // Ejemplo: "15/01/2024","COMPRA DISCO","5000.00","","45000.00"
-  
-  for (let i = 1; i < lines.length; i++) { // Skip header
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     const matches = line.match(/"([^"]+)"|([^,]+)/g);
-    
+
     if (!matches || matches.length < 4) continue;
-    
+
     const fecha = matches[0].replace(/"/g, '').trim();
     const descripcion = matches[1].replace(/"/g, '').trim();
     const debito = matches[2].replace(/"/g, '').trim();
     const credito = matches[3].replace(/"/g, '').trim();
-    
-    // Parsear fecha (formato DD/MM/YYYY)
-    const [day, month, year] = fecha.split('/');
-    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    
-    if (isNaN(date.getTime())) continue;
-    
-    // Determinar monto y tipo
+
+    if (isBalanceOrNoiseRow(descripcion)) continue;
+
+    const date = parseBROUDate(fecha);
+    if (!date) continue;
+
     let amount = 0;
     let type: TransactionType = 'expense';
-    
-    if (debito && debito !== '') {
-      amount = -Math.abs(parseFloat(debito.replace(/\./g, '').replace(',', '.')));
+
+    const debitoAmt = parseBROUAmount(debito);
+    const creditoAmt = parseBROUAmount(credito);
+
+    if (debitoAmt) {
+      amount = debitoAmt;
       type = 'expense';
-    } else if (credito && credito !== '') {
-      amount = Math.abs(parseFloat(credito.replace(/\./g, '').replace(',', '.')));
+    } else if (creditoAmt) {
+      amount = creditoAmt;
       type = 'income';
+    } else {
+      continue;
     }
-    
-    if (amount === 0) continue;
-    
+
     transactions.push({
       date,
       description: descripcion,
       amount,
       currency: 'UYU',
-      type
+      type,
     });
   }
-  
+
   return transactions;
 };
 
@@ -59,136 +94,126 @@ export const parseBROUCreditCSV = (content: string): ParsedTransaction[] => {
   const lines = content.split('\n').filter(line => line.trim());
   const transactions: ParsedTransaction[] = [];
 
-  // BROU Tarjeta formato: Fecha,Comercio,Monto,Cuotas
-  // Ejemplo: "15/01/2024","DISCO MONTEVIDEO","5000.00","1/1"
-  
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     const matches = line.match(/"([^"]+)"|([^,]+)/g);
-    
+
     if (!matches || matches.length < 3) continue;
-    
+
     const fecha = matches[0].replace(/"/g, '').trim();
     const comercio = matches[1].replace(/"/g, '').trim();
     const monto = matches[2].replace(/"/g, '').trim();
-    
-    const [day, month, year] = fecha.split('/');
-    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    
-    if (isNaN(date.getTime())) continue;
-    
-    const amount = -Math.abs(parseFloat(monto.replace(/\./g, '').replace(',', '.')));
-    
+
+    const date = parseBROUDate(fecha);
+    if (!date) continue;
+
+    const amount = parseBROUAmount(monto);
+    if (!amount) continue;
+
     transactions.push({
       date,
       description: comercio,
       amount,
       currency: 'UYU',
-      type: 'expense'
+      type: 'expense',
     });
   }
-  
+
   return transactions;
 };
 
+/**
+ * Excel "Conciliación de Cuentas" BROU:
+ * Fecha | Descripción | … | Número documento | … | Asunto | Dependencia | Débito | Crédito
+ */
 export const parseBROUExcel = (data: any[][]): ParsedTransaction[] => {
   const transactions: ParsedTransaction[] = [];
 
-  console.log('🔍 BROU Excel - Total filas recibidas:', data.length);
-  
-  // Buscar la fila de headers que contiene "Fecha" y "Descripción"
   let headerRowIndex = -1;
   for (let i = 0; i < Math.min(50, data.length); i++) {
     const row = data[i];
     if (!row || row.length === 0) continue;
-    
-    // Buscar fila con "Fecha" en primera columna y "Descripción" en segunda
-    if (row[0] === 'Fecha' && row[1] === 'Descripción') {
+    const cells = row.map(c => String(c || '').toLowerCase());
+    if (cells[0] === 'fecha' && cells.some(c => c.startsWith('descrip'))) {
       headerRowIndex = i;
-      console.log('✅ Header encontrado en fila:', i);
-      console.log('📄 Headers:', row);
       break;
     }
   }
-  
+
   if (headerRowIndex === -1) {
     console.warn('❌ No se encontró la fila de headers en el Excel de BROU');
     return transactions;
   }
-  
-  // Procesar transacciones (comenzar desde la fila siguiente al header)
-  // Formato: [Fecha, Descripción, "", Número de documento, Asunto, Dependencia, Débito, Crédito, ""]
+
+  const header = data[headerRowIndex].map((c: unknown) =>
+    String(c || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+  );
+
+  const findCol = (...names: string[]) =>
+    header.findIndex(h => names.some(n => h === n || h.startsWith(n)));
+
+  const colDate = findCol('fecha');
+  const colDesc = findCol('descrip');
+  const colAsunto = findCol('asunto');
+  let colDebito = findCol('debito');
+  let colCredito = findCol('credito');
+
+  // Fallback del layout actual de Conciliación de Cuentas
+  if (colDebito < 0) colDebito = 7;
+  if (colCredito < 0) colCredito = 8;
+
   for (let i = headerRowIndex + 1; i < data.length; i++) {
     const row = data[i];
-    
-    // Verificar que la fila tenga datos
-    if (!row || row.length < 8) continue;
-    
-    const fecha = row[0]; // Columna A (índice 0) - Fecha
-    const descripcion = row[1]; // Columna B (índice 1) - Descripción
-    const debito = row[6]; // Columna G (índice 6) - Débito
-    const credito = row[7]; // Columna H (índice 7) - Crédito
-    
-    // Skip si no hay fecha o descripción
-    if (!fecha || !descripcion) continue;
-    
-    // Skip si es una fila de totales o resumen
-    if (typeof descripcion === 'string' &&
-        (descripcion.includes('TOTAL') || descripcion.includes('SALDO') || descripcion.includes('Movimientos'))) {
-      continue;
-    }
-    
-    // Parsear fecha
-    let date: Date;
-    if (typeof fecha === 'number') {
-      // Excel date serial number (días desde 1900-01-01)
-      date = new Date((fecha - 25569) * 86400 * 1000);
-    } else if (typeof fecha === 'string') {
-      // Formato DD/MM/YYYY
-      const [day, month, year] = fecha.split('/');
-      date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    } else {
-      continue;
-    }
-    
-    if (isNaN(date.getTime())) continue;
-    
-    // Determinar monto y tipo
+    if (!row || row.length === 0) continue;
+
+    const fecha = row[colDate >= 0 ? colDate : 0];
+    const descripcionRaw = row[colDesc >= 0 ? colDesc : 1];
+    if (!fecha || descripcionRaw === undefined || descripcionRaw === '') continue;
+
+    const descripcion = String(descripcionRaw).trim().replace(/\s+/g, ' ');
+    if (isBalanceOrNoiseRow(descripcion)) continue;
+
+    const date = parseBROUDate(fecha);
+    if (!date) continue;
+
+    const debitoAmt = parseBROUAmount(row[colDebito]);
+    const creditoAmt = parseBROUAmount(row[colCredito]);
+
     let amount = 0;
     let type: TransactionType = 'expense';
-    
-    if (debito && typeof debito === 'number' && debito > 0) {
-      amount = -Math.abs(debito);
+
+    if (debitoAmt) {
+      amount = debitoAmt;
       type = 'expense';
-    } else if (credito && typeof credito === 'number' && credito > 0) {
-      amount = Math.abs(credito);
+    } else if (creditoAmt) {
+      amount = creditoAmt;
       type = 'income';
     } else {
-      continue; // Skip si no hay monto
+      continue;
     }
-    
-    // Limpiar descripción
-    const description = typeof descripcion === 'string'
-      ? descripcion.trim().replace(/\s+/g, ' ')
-      : String(descripcion);
-    
+
+    const asunto =
+      colAsunto >= 0 && row[colAsunto] != null && String(row[colAsunto]).trim()
+        ? String(row[colAsunto]).trim()
+        : '';
+
     transactions.push({
       date,
-      description,
+      description: asunto ? `${descripcion} · ${asunto}` : descripcion,
       amount,
       currency: 'UYU',
-      type
+      type,
     });
   }
-  
+
   console.log('📄 Transacciones parseadas de BROU Excel:', transactions.length);
   return transactions;
 };
 
-export const parseBROUPDF = async (file: File): Promise<ParsedTransaction[]> => {
-  // Para PDF, usaremos el parser genérico por ahora
-  // En producción, se puede usar pdf-parse o similar para extraer texto específico
+export const parseBROUPDF = async (_file: File): Promise<ParsedTransaction[]> => {
   return [];
 };
-
-// Made with Bob
