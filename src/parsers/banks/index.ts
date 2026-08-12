@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
-import { ParsedTransaction, Currency } from '../../types';
+import { ParsedTransaction, Currency, ExchangeRates } from '../../types';
+import { DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
 import { parseBROUDebitCSV, parseBROUCreditCSV, parseBROUExcel } from './brouParser';
 import { parseItauDebitCSV, parseItauCreditCSV, parseItauCreditPDF, parseItauExcel } from './itauParser';
 import { parseSantanderDebitCSV, parseSantanderCreditCSV, parseSantanderExcel } from './santanderParser';
@@ -25,10 +26,11 @@ export interface BankParserConfig {
   accountType: 'debit' | 'credit' | 'investment';
   fileType: 'csv' | 'excel' | 'pdf';
   currency?: Currency;
+  rates?: ExchangeRates;
 }
 
 export const getBankParser = (config: BankParserConfig) => {
-  const { bank, accountType, fileType, currency } = config;
+  const { bank, accountType, fileType, currency, rates } = config;
 
   // BROU
   if (bank === 'BROU') {
@@ -77,13 +79,14 @@ export const getBankParser = (config: BankParserConfig) => {
     }
   }
 
-  // Prex
+  // Prex — una cuenta; BRL/USD → UYU con tasas configuradas
   if (bank === 'Prex') {
+    const exchangeRates = rates || DEFAULT_EXCHANGE_RATES;
     if (fileType === 'csv') {
-      return (content: string) => parsePrexCSV(content, currency || 'UYU');
+      return (content: string) => parsePrexCSV(content, currency || 'UYU', exchangeRates);
     }
     if (fileType === 'excel') {
-      return (data: any[]) => parsePrexExcel(data, currency || 'UYU');
+      return (data: any[]) => parsePrexExcel(data, currency || 'UYU', exchangeRates);
     }
   }
 
@@ -118,7 +121,8 @@ export const parseByBank = async (
   file: File,
   bank: string,
   accountType: 'debit' | 'credit' | 'investment',
-  currency?: Currency
+  currency?: Currency,
+  rates?: ExchangeRates
 ): Promise<ParsedTransaction[]> => {
   const fileName = file.name.toLowerCase();
   let fileType: 'csv' | 'excel' | 'pdf';
@@ -133,7 +137,7 @@ export const parseByBank = async (
     throw new Error('Formato de archivo no soportado');
   }
 
-  const parser = getBankParser({ bank, accountType, fileType, currency });
+  const parser = getBankParser({ bank, accountType, fileType, currency, rates });
 
   if (!parser) {
     throw new Error(`No hay parser disponible para ${bank} - ${fileType}`);
@@ -283,8 +287,8 @@ export const getParserInfo = (bank: string) => {
     'Prex': {
       name: 'Prex',
       formats: ['CSV', 'Excel'],
-      types: ['Pesos', 'Dólares'],
-      notes: 'Especificar moneda al cargar'
+      types: ['Débito (cuenta única UYU)'],
+      notes: 'Estado de cuenta con UYU/BRL; BRL se convierte a $U con la tasa de Configuración'
     },
     'BHU': {
       name: 'Banco Hipotecario del Uruguay',

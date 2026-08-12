@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
-import { getAccounts, recalculateAccountBalance } from '../../services/accounts.service';
+import { getAccounts, recalculateAccountBalance, ensureUnifiedPrexAccount } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
 import { createTransactions, parsedToTransaction, deleteTransactionsByFilter } from '../../services/transactions.service';
 import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory, deleteUploadHistoryByFilter } from '../../services/uploadHistory.service';
+import { getExchangeRates, DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
 import { calculateFileHash } from '../../parsers/fileHasher';
 import { parseCSV } from '../../parsers/csvParser';
 import { parseExcel } from '../../parsers/excelParser';
@@ -17,7 +18,7 @@ import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColo
 import { getBankDownloadGuide } from '../../utils/bankDownloadGuides';
 import { isSnapshotBank, SNAPSHOT_STATEMENT_MONTH } from '../../utils/snapshotBanks';
 import { getClosedStatementPeriod, getClosedMonthsOfCurrentYear } from '../../utils/statementPeriod';
-import { Account, Category, Transaction, UploadHistory } from '../../types';
+import { Account, Category, ExchangeRates, Transaction, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
 
@@ -100,6 +101,7 @@ export const UploadStatements = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [uploadHistory, setUploadHistory] = useState<UploadHistory[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingStatusFilter, setTrackingStatusFilter] = useState<'all' | 'uploaded' | 'missing'>('all');
   const [useSmartParser, setUseSmartParser] = useState(true);
@@ -188,15 +190,19 @@ export const UploadStatements = () => {
       if (migratedCount > 0) {
         console.log(`✅ Migrados ${migratedCount} registros antiguos a Junio 2026`);
       }
-      
-      const [accountsData, historyData, ownersData] = await Promise.all([
+
+      await ensureUnifiedPrexAccount();
+
+      const [accountsData, historyData, ownersData, rates] = await Promise.all([
         getAccounts(),
         getUploadHistory(),
-        getOwners()
+        getOwners(),
+        getExchangeRates(),
       ]);
       setAccounts(accountsData);
       setUploadHistory(historyData);
       setOwners(ownersData);
+      setExchangeRates(rates);
     } catch (error) {
       console.error('Error al cargar datos:', error);
       setAccounts([]);
@@ -298,7 +304,8 @@ export const UploadStatements = () => {
             file,
             bankToUse,
             account.type,
-            account.currency
+            account.currency,
+            exchangeRates
           );
           console.log(`✅ Usando parser específico para ${bankToUse} (${account.type})`);
         } catch (error) {

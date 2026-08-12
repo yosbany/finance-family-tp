@@ -2,7 +2,8 @@ import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
 import { familyPath } from './familyPaths';
 import { Account, Transaction } from '../types';
-import { getTransactions } from './transactions.service';
+import { getTransactions, updateTransaction } from './transactions.service';
+import { reassignUploadHistoryAccount } from './uploadHistory.service';
 
 export const createAccount = async (account: Omit<Account, 'id'>): Promise<string> => {
   try {
@@ -168,8 +169,7 @@ export const initializeDefaultAccounts = async (): Promise<void> => {
       { name: "Itaú Visa", type: "credit" as const, currency: "UYU" as const, bank: "Itaú", owner: "Yosba", balance: 0, initialBalance: 0, creditLimit: 0 },
       { name: "OCA Master 1", type: "credit" as const, currency: "UYU" as const, bank: "OCA", owner: "Yosba", balance: 0, initialBalance: 0, creditLimit: 0 },
       { name: "OCA Visa", type: "credit" as const, currency: "UYU" as const, bank: "OCA", owner: "Yosba", balance: 0, initialBalance: 0, creditLimit: 0 },
-      { name: "Prex Pesos", type: "debit" as const, currency: "UYU" as const, bank: "Prex", owner: "Yosba", balance: 0, initialBalance: 0 },
-      { name: "Prex Dólares", type: "debit" as const, currency: "USD" as const, bank: "Prex", owner: "Yosba", balance: 0, initialBalance: 0 },
+      { name: "Prex", type: "debit" as const, currency: "UYU" as const, bank: "Prex", owner: "Yosba", balance: 0, initialBalance: 0 },
       { name: "Santander Pesos", type: "debit" as const, currency: "UYU" as const, bank: "Santander", owner: "Yane", balance: 0, initialBalance: 0 },
       { name: "Santander Dólares", type: "debit" as const, currency: "USD" as const, bank: "Santander", owner: "Yane", balance: 0, initialBalance: 0 },
       { name: "Santander Visa", type: "credit" as const, currency: "UYU" as const, bank: "Santander", owner: "Yane", balance: 0, initialBalance: 0, creditLimit: 0 },
@@ -185,4 +185,52 @@ export const initializeDefaultAccounts = async (): Promise<void> => {
     console.error('Error al inicializar cuentas predeterminadas:', error);
     throw error;
   }
+};
+
+/**
+ * Una sola cuenta Prex (UYU). Fusiona Prex Pesos/Dólares si existían.
+ */
+export const ensureUnifiedPrexAccount = async (): Promise<string> => {
+  const accounts = await getAccounts();
+  const prexAccounts = accounts.filter(a => a.bank === 'Prex');
+
+  if (prexAccounts.length === 0) {
+    return createAccount({
+      name: 'Prex',
+      type: 'debit',
+      currency: 'UYU',
+      bank: 'Prex',
+      owner: 'Yosba',
+      balance: 0,
+      initialBalance: 0,
+      lastSync: Date.now(),
+    });
+  }
+
+  const keep =
+    prexAccounts.find(a => a.name === 'Prex') ||
+    prexAccounts.find(a => a.currency === 'UYU') ||
+    prexAccounts[0];
+
+  await updateAccount(keep.id, {
+    name: 'Prex',
+    currency: 'UYU',
+    type: 'debit',
+  });
+
+  const transactions = await getTransactions();
+  for (const other of prexAccounts.filter(a => a.id !== keep.id)) {
+    const toMove = transactions.filter(tx => tx.accountId === other.id);
+    for (const tx of toMove) {
+      await updateTransaction(tx.id, {
+        accountId: keep.id,
+        currency: 'UYU',
+      });
+    }
+    await reassignUploadHistoryAccount(other.id, keep.id);
+    await deleteAccount(other.id);
+  }
+
+  await recalculateAccountBalance(keep.id);
+  return keep.id;
 };

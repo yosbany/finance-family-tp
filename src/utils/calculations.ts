@@ -111,6 +111,7 @@ export const toUyu = (
 ): number => {
   if (currency === 'UYU') return amount;
   if (currency === 'USD') return amount * rates.usdToUyu;
+  if (currency === 'BRL') return amount * rates.brlToUyu;
   return amount * rates.uiToUyu;
 };
 
@@ -229,6 +230,9 @@ export const formatCurrency = (amount: number, currency: ConvertibleCurrency = '
   if (currency === 'UI') {
     return `${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} UI`;
   }
+  if (currency === 'BRL') {
+    return `R$ ${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   return `$ ${amount.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
@@ -245,6 +249,7 @@ export const convertCurrency = (
   const inUyu = toUyu(amount, from, rates);
   if (to === 'UYU') return inUyu;
   if (to === 'USD') return inUyu / rates.usdToUyu;
+  if (to === 'BRL') return inUyu / rates.brlToUyu;
   return inUyu / rates.uiToUyu;
 };
 

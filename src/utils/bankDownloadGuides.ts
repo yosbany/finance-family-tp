@@ -83,13 +83,13 @@ export const bankDownloadGuides: Record<string, BankDownloadGuide> = {
     formats: ['Excel', 'CSV'],
     steps: [
       'Entrá a la App Prex o web e iniciá sesión.',
-      'Elegí la tarjeta/cuenta en pesos o dólares.',
-      'Andá a Movimientos.',
-      'Exportá o descargá el historial del período (Excel/CSV).',
-      'Subí el archivo acá: Prex → Débito.',
+      'Andá a Movimientos / Estado de cuenta.',
+      'Descargá el Excel del período (junio, julio, etc.).',
+      'Subí el archivo acá: Prex → Débito (hay una sola cuenta Prex).',
     ],
     tips: [
-      'Cargá por separado pesos y dólares si vienen en archivos distintos.',
+      'El archivo puede traer UYU y BRL juntos: los BRL se convierten a $U con la tasa BRL de Configuración.',
+      'No hace falta separar pesos y dólares: es una sola cuenta Prex.',
     ],
   },
   BHU: {

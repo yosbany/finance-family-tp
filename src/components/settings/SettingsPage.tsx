@@ -15,6 +15,7 @@ export const SettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [usdToUyu, setUsdToUyu] = useState(String(DEFAULT_EXCHANGE_RATES.usdToUyu));
   const [uiToUyu, setUiToUyu] = useState(String(DEFAULT_EXCHANGE_RATES.uiToUyu));
+  const [brlToUyu, setBrlToUyu] = useState(String(DEFAULT_EXCHANGE_RATES.brlToUyu));
   const [updatedAt, setUpdatedAt] = useState<number | undefined>();
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export const SettingsPage = () => {
       const rates = await getExchangeRates();
       setUsdToUyu(String(rates.usdToUyu));
       setUiToUyu(String(rates.uiToUyu));
+      setBrlToUyu(String(rates.brlToUyu));
       setUpdatedAt(rates.updatedAt);
     } catch (error) {
       console.error(error);
@@ -47,16 +49,18 @@ export const SettingsPage = () => {
     e.preventDefault();
     const usd = parsePositive(usdToUyu);
     const ui = parsePositive(uiToUyu);
-    if (usd === null || ui === null) {
+    const brl = parsePositive(brlToUyu);
+    if (usd === null || ui === null || brl === null) {
       showError('Ingresá valores mayores a 0 (podés usar coma o punto decimal)');
       return;
     }
 
     try {
       setSaving(true);
-      const saved = await saveExchangeRates({ usdToUyu: usd, uiToUyu: ui });
+      const saved = await saveExchangeRates({ usdToUyu: usd, uiToUyu: ui, brlToUyu: brl });
       setUsdToUyu(String(saved.usdToUyu));
       setUiToUyu(String(saved.uiToUyu));
+      setBrlToUyu(String(saved.brlToUyu));
       setUpdatedAt(saved.updatedAt);
       showSuccess('Tipos de cambio guardados');
     } catch (error) {
@@ -70,6 +74,7 @@ export const SettingsPage = () => {
   const previewRates: ExchangeRates = {
     usdToUyu: parsePositive(usdToUyu) ?? DEFAULT_EXCHANGE_RATES.usdToUyu,
     uiToUyu: parsePositive(uiToUyu) ?? DEFAULT_EXCHANGE_RATES.uiToUyu,
+    brlToUyu: parsePositive(brlToUyu) ?? DEFAULT_EXCHANGE_RATES.brlToUyu,
   };
 
   if (loading) {
@@ -95,12 +100,12 @@ export const SettingsPage = () => {
             Tipos de cambio
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Se usan en dashboard, patrimonio neto y objetivos al convertir USD o UI a pesos.
+            Se usan en dashboard, patrimonio, objetivos y al importar Prex (BRL → $U).
             Los saldos de cada cuenta siguen en su moneda original.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="label" htmlFor="usdToUyu">
               1 USD = ¿cuántos $U?
@@ -129,14 +134,27 @@ export const SettingsPage = () => {
               placeholder="6,2"
             />
           </div>
+          <div>
+            <label className="label" htmlFor="brlToUyu">
+              1 BRL = ¿cuántos $U?
+            </label>
+            <input
+              id="brlToUyu"
+              type="text"
+              inputMode="decimal"
+              value={brlToUyu}
+              onChange={(e) => setBrlToUyu(e.target.value)}
+              className="input-field"
+              placeholder="7,5"
+            />
+          </div>
         </div>
 
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-4 space-y-2 text-sm text-gray-700 dark:text-gray-300">
           <p className="font-medium text-gray-900 dark:text-white">Vista previa</p>
           <p>US$ 100 → {formatCurrency(convertCurrency(100, 'USD', 'UYU', previewRates), 'UYU')}</p>
-          <p>$U 1.000 → {formatCurrency(convertCurrency(1000, 'UYU', 'USD', previewRates), 'USD')}</p>
           <p>100 UI → {formatCurrency(convertCurrency(100, 'UI', 'UYU', previewRates), 'UYU')}</p>
-          <p>$U 1.000 → {formatCurrency(convertCurrency(1000, 'UYU', 'UI', previewRates), 'UI')}</p>
+          <p>R$ 100 → {formatCurrency(convertCurrency(100, 'BRL', 'UYU', previewRates), 'UYU')}</p>
         </div>
 
         {updatedAt && (

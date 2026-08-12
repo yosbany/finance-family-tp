@@ -319,7 +319,7 @@ export const Dashboard = () => {
         <p className="page-subtitle">
           Panorama familiar · mes cerrado {closedLabel}
           <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-            (USD→$U {rates.usdToUyu} · UI→$U {rates.uiToUyu} ·{' '}
+            (USD→$U {rates.usdToUyu} · BRL→$U {rates.brlToUyu} · UI→$U {rates.uiToUyu} ·{' '}
             <Link to="/settings" className="underline hover:text-primary">Configurar</Link>)
           </span>
         </p>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAccounts, createAccount, updateAccount, initializeDefaultAccounts, recalculateAllAccountBalances } from '../../services/accounts.service';
+import { getAccounts, createAccount, updateAccount, initializeDefaultAccounts, recalculateAllAccountBalances, ensureUnifiedPrexAccount } from '../../services/accounts.service';
 import { initializeDefaultCategories } from '../../services/categories.service';
 import { getTransactionsByAccount } from '../../services/transactions.service';
 import { getOwners, createOwner, deleteOwner, initializeDefaultOwners, migrateAmbosToNucleo, Owner } from '../../services/owners.service';
@@ -108,30 +108,21 @@ export const AccountsManagement = () => {
       if (accountsData.length === 0) {
         await initializeDefaultAccounts();
         await initializeDefaultCategories();
-        const newAccounts = await getAccounts();
-        setAccounts(newAccounts);
-        setInitializing(false);
-        
-        // Cargar conteo de transacciones categorizadas
-        const counts: Record<string, number> = {};
-        for (const account of newAccounts) {
-          const txs = await getTransactionsByAccount(account.id);
-          const categorizedTxs = txs.filter(tx => tx.category && tx.category !== '');
-          counts[account.id] = categorizedTxs.length;
-        }
-        setTransactionCounts(counts);
-      } else {
-        setAccounts(accountsData);
-        
-        // Cargar conteo de transacciones categorizadas por cuenta
-        const counts: Record<string, number> = {};
-        for (const account of accountsData) {
-          const txs = await getTransactionsByAccount(account.id);
-          const categorizedTxs = txs.filter(tx => tx.category && tx.category !== '');
-          counts[account.id] = categorizedTxs.length;
-        }
-        setTransactionCounts(counts);
       }
+
+      await ensureUnifiedPrexAccount();
+      const finalAccounts = await getAccounts();
+      setAccounts(finalAccounts);
+      setInitializing(false);
+
+      // Cargar conteo de transacciones categorizadas por cuenta
+      const counts: Record<string, number> = {};
+      for (const account of finalAccounts) {
+        const txs = await getTransactionsByAccount(account.id);
+        const categorizedTxs = txs.filter(tx => tx.category && tx.category !== '');
+        counts[account.id] = categorizedTxs.length;
+      }
+      setTransactionCounts(counts);
     } catch (err) {
       console.error('Error al cargar cuentas:', err);
     } finally {

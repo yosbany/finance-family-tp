@@ -1,7 +1,7 @@
 export type AccountType = 'debit' | 'credit' | 'investment';
 export type Currency = 'UYU' | 'USD';
-/** Monedas usadas en conversiones globales (incluye UI). */
-export type ConvertibleCurrency = Currency | 'UI';
+/** Monedas usadas en conversiones globales (incluye UI y BRL de Prex). */
+export type ConvertibleCurrency = Currency | 'UI' | 'BRL';
 export type TransactionType = 'income' | 'expense' | 'transfer';
 export type TransactionStatus = 'pending' | 'classified' | 'verified';
 export type AssetType = 'property' | 'vehicle' | 'investment' | 'other';
@@ -13,6 +13,8 @@ export interface ExchangeRates {
   usdToUyu: number;
   /** 1 UI (Unidad Indexada) = N pesos uruguayos */
   uiToUyu: number;
+  /** 1 BRL (real brasileño) = N pesos uruguayos */
+  brlToUyu: number;
   updatedAt?: number;
 }
 

@@ -176,6 +176,19 @@ export const deleteUploadHistory = async (uploadId: string): Promise<void> => {
   }
 };
 
+export const reassignUploadHistoryAccount = async (
+  fromAccountId: string,
+  toAccountId: string
+): Promise<number> => {
+  const history = await getUploadHistory();
+  const toMove = history.filter(u => u.accountId === fromAccountId);
+  for (const upload of toMove) {
+    const uploadRef = ref(database, familyPath('uploadHistory', upload.id));
+    await update(uploadRef, { accountId: toAccountId });
+  }
+  return toMove.length;
+};
+
 export const deleteUploadHistoryByFilter = async (filter: {
   accountId?: string;
   month?: number;
