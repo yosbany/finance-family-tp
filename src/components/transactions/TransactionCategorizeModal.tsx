@@ -5,6 +5,7 @@ import {
   learnFromManualClassification,
   KeywordMatchInfo,
 } from '../../utils/categorization';
+import { getDefaultCategoryForMovement } from '../../utils/fixedCategories';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
 interface TransactionCategorizeModalProps {
@@ -48,7 +49,12 @@ export const TransactionCategorizeModal = ({
   useEffect(() => {
     if (!transaction || !isOpen) return;
 
-    const initialCategory = transaction.category || categories[0]?.id || '';
+    const defaultCategory = getDefaultCategoryForMovement(transaction, categories);
+    const initialCategory =
+      transaction.category ||
+      defaultCategory?.id ||
+      categories[0]?.id ||
+      '';
     setCategoryId(initialCategory);
     setCustomKeyword('');
     setAddRules(true);

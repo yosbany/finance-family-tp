@@ -2,7 +2,12 @@ import { ref, push, set, get, update, remove } from 'firebase/database';
 import { database } from './firebase';
 import { familyPath } from './familyPaths';
 import { Category } from '../types';
-import { isFixedCategory, TRANSFER_CATEGORY_NAME } from '../utils/fixedCategories';
+import {
+  isFixedCategory,
+  TRANSFER_CATEGORY_NAME,
+  OTHER_INCOME_CATEGORY_NAME,
+  OTHER_EXPENSE_CATEGORY_NAME,
+} from '../utils/fixedCategories';
 
 export const createCategory = async (category: Omit<Category, 'id'>): Promise<string> => {
   try {
@@ -71,7 +76,7 @@ export const deleteCategory = async (categoryId: string): Promise<void> => {
   try {
     const category = await getCategoryById(categoryId);
     if (category && isFixedCategory(category)) {
-      throw new Error(`La categoría "${TRANSFER_CATEGORY_NAME}" es del sistema y no se puede eliminar`);
+      throw new Error(`La categoría "${category.name}" es del sistema y no se puede eliminar`);
     }
 
     const categoryRef = ref(database, familyPath('categories', categoryId));
@@ -106,7 +111,8 @@ export const initializeDefaultCategories = async (): Promise<void> => {
       { name: 'Entretenimiento', type: 'expense', icon: '🎬', color: '#14B8A6', keywords: [], subcategories: [] },
       { name: 'Educación', type: 'expense', icon: '📚', color: '#6366F1', keywords: [], subcategories: [] },
       { name: 'Compras', type: 'expense', icon: '🛍️', color: '#F97316', keywords: [], subcategories: [] },
-      { name: 'Otros Gastos', type: 'expense', icon: '📦', color: '#64748B', keywords: [], subcategories: [] },
+      { name: OTHER_INCOME_CATEGORY_NAME, type: 'income', icon: '📥', color: '#0EA5E9', keywords: [], subcategories: [] },
+      { name: OTHER_EXPENSE_CATEGORY_NAME, type: 'expense', icon: '📦', color: '#64748B', keywords: [], subcategories: [] },
       {
         name: TRANSFER_CATEGORY_NAME,
         type: 'transfer',
@@ -117,7 +123,12 @@ export const initializeDefaultCategories = async (): Promise<void> => {
       },
     ];
 
+    // Evitar duplicar "Otros Gastos" si ya estaba en la lista antigua
+    const seen = new Set<string>();
     for (const category of defaultCategories) {
+      const key = `${category.type}:${category.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       await createCategory(category);
     }
   } catch (error) {
@@ -144,6 +155,39 @@ export const ensureTransferCategory = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('Error al asegurar categoría de transferencias:', error);
+    throw error;
+  }
+};
+
+export const ensureOtherDefaultCategories = async (): Promise<void> => {
+  try {
+    const categories = await getCategories();
+
+    if (!categories.some(c => c.name === OTHER_INCOME_CATEGORY_NAME)) {
+      await createCategory({
+        name: OTHER_INCOME_CATEGORY_NAME,
+        type: 'income',
+        icon: '📥',
+        color: '#0EA5E9',
+        keywords: [],
+        subcategories: [],
+      });
+      console.log(`✅ Categoría "${OTHER_INCOME_CATEGORY_NAME}" agregada`);
+    }
+
+    if (!categories.some(c => c.name === OTHER_EXPENSE_CATEGORY_NAME)) {
+      await createCategory({
+        name: OTHER_EXPENSE_CATEGORY_NAME,
+        type: 'expense',
+        icon: '📦',
+        color: '#64748B',
+        keywords: [],
+        subcategories: [],
+      });
+      console.log(`✅ Categoría "${OTHER_EXPENSE_CATEGORY_NAME}" agregada`);
+    }
+  } catch (error) {
+    console.error('Error al asegurar categorías Otros Ingresos/Gastos:', error);
     throw error;
   }
 };

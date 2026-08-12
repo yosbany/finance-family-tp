@@ -14,6 +14,7 @@ import {
   removeKeywordsFromCategory,
   ensureTransferCategory,
   ensureReingresoIvaCategory,
+  ensureOtherDefaultCategories,
   clearAllSubcategories
 } from '../../services/categories.service';
 import {
@@ -97,6 +98,7 @@ export const TransactionList = () => {
       // Asegurar que existe la categoría de Transferencias Internas
       await ensureTransferCategory();
       await ensureReingresoIvaCategory();
+      await ensureOtherDefaultCategories();
       await clearAllSubcategories();
 
       const [txs, accs, cats] = await Promise.all([

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory, ensureReingresoIvaCategory, clearAllSubcategories } from '../../services/categories.service';
+import { getCategories, updateCategory, createCategory, deleteCategory, ensureTransferCategory, ensureReingresoIvaCategory, ensureOtherDefaultCategories, clearAllSubcategories } from '../../services/categories.service';
 import { getTransactions } from '../../services/transactions.service';
 import { Category, Transaction } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
@@ -46,6 +46,7 @@ export const CategoriesManagement = () => {
       // Asegurar que existe la categoría de Transferencias Internas
       await ensureTransferCategory();
       await ensureReingresoIvaCategory();
+      await ensureOtherDefaultCategories();
       await clearAllSubcategories();
 
       const data = await getCategories();
@@ -147,7 +148,7 @@ export const CategoriesManagement = () => {
 
     const category = categories.find(c => c.id === categoryId);
     if (category && isFixedCategory(category)) {
-      showWarning('Transferencias Internas es una categoría fija del sistema y no se puede eliminar.');
+      showWarning(`"${category.name}" es una categoría fija del sistema y no se puede eliminar.`);
       return;
     }
 
