@@ -349,50 +349,30 @@ export const TransactionList = () => {
     }
   };
 
-  const handleRecategorizeAll = async () => {
-    if (sortedPending.length === 0 || !user) return;
-    
-    setRecategorizing(true);
-    let categorizedCount = 0;
+  const getAccount = (accountId: string) => {
+    return accounts.find(a => a.id === accountId);
+  };
 
-    try {
-      // Re-categorizar cada transacción pendiente
-      for (const transaction of sortedPending) {
-        const result = categorizeTransaction(transaction.description, categories);
-        
-        if (result && result.categoryId) {
-          // Preparar actualización sin valores undefined
-          const updates: Partial<Transaction> = {
-            category: result.categoryId,
-            status: 'classified'
-          };
-          
-          // Solo agregar subcategory si existe
-          if (result.subcategoryId) {
-            updates.subcategory = result.subcategoryId;
-          }
-          
-          // Actualizar la transacción en Firebase
-          await updateTransaction(transaction.id, updates);
-          categorizedCount++;
-        }
-      }
+  const getAccountName = (accountId: string) => {
+    const account = getAccount(accountId);
+    return account ? `${account.name} ${account.owner}` : 'Desconocida';
+  };
 
-      // Recargar transacciones
-      const updatedTransactions = await getTransactions();
-      setTransactions(updatedTransactions);
-      
-      if (categorizedCount > 0) {
-        showSuccess(`Se categorizaron automáticamente ${categorizedCount} de ${sortedPending.length} transacciones`);
-      } else {
-        showInfo('No se encontraron coincidencias con las reglas actuales. Considera agregar más palabras clave a las categorías.');
-      }
-    } catch (err) {
-      console.error('Error al re-categorizar:', err);
-      setError('Error al re-categorizar las transacciones');
-    } finally {
-      setRecategorizing(false);
-    }
+  const getOwnerBadgeColor = (owner: string) => getOwnerBadgeClasses(owner);
+
+  const getCategoryName = (categoryId: string) => {
+    return categories.find(c => c.id === categoryId)?.name || 'Sin categoría';
+  };
+
+  const getCategoryColor = (categoryId: string) => {
+    return categories.find(c => c.id === categoryId)?.color || '#6B7280';
+  };
+
+  const formatAmount = (amount: number, currency: string) => {
+    return new Intl.NumberFormat('es-UY', {
+      style: 'currency',
+      currency: currency
+    }).format(amount);
   };
 
   // Filtrar transacciones
@@ -441,30 +421,50 @@ export const TransactionList = () => {
     new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
-  const getAccount = (accountId: string) => {
-    return accounts.find(a => a.id === accountId);
-  };
+  const handleRecategorizeAll = async () => {
+    if (sortedPending.length === 0 || !user) return;
+    
+    setRecategorizing(true);
+    let categorizedCount = 0;
 
-  const getAccountName = (accountId: string) => {
-    const account = getAccount(accountId);
-    return account ? `${account.name} ${account.owner}` : 'Desconocida';
-  };
+    try {
+      // Re-categorizar cada transacción pendiente
+      for (const transaction of sortedPending) {
+        const result = categorizeTransaction(transaction.description, categories);
+        
+        if (result && result.categoryId) {
+          // Preparar actualización sin valores undefined
+          const updates: Partial<Transaction> = {
+            category: result.categoryId,
+            status: 'classified'
+          };
+          
+          // Solo agregar subcategory si existe
+          if (result.subcategoryId) {
+            updates.subcategory = result.subcategoryId;
+          }
+          
+          // Actualizar la transacción en Firebase
+          await updateTransaction(transaction.id, updates);
+          categorizedCount++;
+        }
+      }
 
-  const getOwnerBadgeColor = (owner: string) => getOwnerBadgeClasses(owner);
-
-  const getCategoryName = (categoryId: string) => {
-    return categories.find(c => c.id === categoryId)?.name || 'Sin categoría';
-  };
-
-  const getCategoryColor = (categoryId: string) => {
-    return categories.find(c => c.id === categoryId)?.color || '#6B7280';
-  };
-
-  const formatAmount = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('es-UY', {
-      style: 'currency',
-      currency: currency
-    }).format(amount);
+      // Recargar transacciones
+      const updatedTransactions = await getTransactions();
+      setTransactions(updatedTransactions);
+      
+      if (categorizedCount > 0) {
+        showSuccess(`Se categorizaron automáticamente ${categorizedCount} de ${sortedPending.length} transacciones`);
+      } else {
+        showInfo('No se encontraron coincidencias con las reglas actuales. Considera agregar más palabras clave a las categorías.');
+      }
+    } catch (err) {
+      console.error('Error al re-categorizar:', err);
+      setError('Error al re-categorizar las transacciones');
+    } finally {
+      setRecategorizing(false);
+    }
   };
 
   const renderTransactionRow = (transaction: Transaction) => {
