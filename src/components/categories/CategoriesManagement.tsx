@@ -643,9 +643,6 @@ export const CategoriesManagement = () => {
                               <span className={`text-xs px-2 py-0.5 rounded-full ${getCategoryTypeColor(category.type)}`}>
                                 {getCategoryTypeLabel(category.type)}
                               </span>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100">
-                                Fija
-                              </span>
                               <span className="text-xs text-gray-500 dark:text-gray-400">
                                 {transactionCounts[category.id] || 0} transacciones
                               </span>
