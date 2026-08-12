@@ -225,133 +225,226 @@ const calculateLevenshteinSimilarity = (str1: string, str2: string): number => {
   return 1 - distance / maxLen;
 };
 
+export interface KeywordMatchInfo {
+  keyword: string;
+  source: 'category' | 'subcategory';
+  sourceName: string;
+  matchType: 'exact' | 'partial' | 'regex' | 'fuzzy';
+  score: number;
+}
+
+export interface CategorizationResult {
+  categoryId: string;
+  subcategoryId?: string;
+  confidence: number;
+  matchedKeywords: KeywordMatchInfo[];
+}
+
 /**
  * Categoriza una transacción usando el motor mejorado
  */
 export const categorizeTransaction = (
   description: string,
   categories: Category[]
-): { categoryId: string; subcategoryId?: string; confidence: number } | null => {
+): CategorizationResult | null => {
   const normalizedDesc = normalizeText(description);
   const tokens = tokenize(description);
   const bigrams = generateNGrams(tokens, 2);
   const trigrams = generateNGrams(tokens, 3);
-  const entities = extractEntities(description);
 
   interface Match {
     categoryId: string;
     subcategoryId?: string;
     score: number;
-    matchDetails: string[];
+    matchedKeywords: KeywordMatchInfo[];
   }
 
   const matches: Match[] = [];
 
-  // Buscar coincidencias en todas las categorías
   for (const category of categories) {
     let categoryScore = 0;
-    const categoryMatchDetails: string[] = [];
-    let bestSubcategoryMatch: { id: string; score: number; details: string[] } | null = null;
+    const matchedKeywords: KeywordMatchInfo[] = [];
+    let bestSubcategoryMatch: {
+      id: string;
+      score: number;
+      keywords: KeywordMatchInfo[];
+    } | null = null;
 
-    // Verificar keywords de la categoría principal
     if (category.keywords && Array.isArray(category.keywords)) {
       for (const keyword of category.keywords) {
         const result = matchKeyword(normalizedDesc, keyword);
         if (result.matches) {
           categoryScore += result.score;
-          categoryMatchDetails.push(`Cat: "${keyword}" (${result.matchType}, +${result.score})`);
+          if (!matchedKeywords.some(m => m.keyword === keyword && m.source === 'category')) {
+            matchedKeywords.push({
+              keyword,
+              source: 'category',
+              sourceName: category.name,
+              matchType: result.matchType,
+              score: result.score,
+            });
+          }
+          continue;
         }
 
-        // También verificar en n-gramas
         for (const ngram of [...bigrams, ...trigrams]) {
           const ngramResult = matchKeyword(ngram, keyword);
           if (ngramResult.matches) {
-            categoryScore += ngramResult.score * 0.8; // Peso ligeramente menor para n-gramas
-            categoryMatchDetails.push(`Cat n-gram: "${keyword}" in "${ngram}" (+${Math.floor(ngramResult.score * 0.8)})`);
+            const score = ngramResult.score * 0.8;
+            categoryScore += score;
+            if (!matchedKeywords.some(m => m.keyword === keyword && m.source === 'category')) {
+              matchedKeywords.push({
+                keyword,
+                source: 'category',
+                sourceName: category.name,
+                matchType: ngramResult.matchType,
+                score: Math.floor(score),
+              });
+            }
+            break;
           }
         }
       }
     }
 
-    // Buscar en subcategorías
     if (category.subcategories && Array.isArray(category.subcategories)) {
       for (const subcategory of category.subcategories) {
         if (subcategory.keywords && Array.isArray(subcategory.keywords)) {
           let subcategoryScore = 0;
-          const subcategoryDetails: string[] = [];
+          const subcategoryKeywords: KeywordMatchInfo[] = [];
 
           for (const subKeyword of subcategory.keywords) {
             const result = matchKeyword(normalizedDesc, subKeyword);
             if (result.matches) {
-              // Subcategorías tienen mayor peso base
-              subcategoryScore += result.score * 1.5;
-              subcategoryDetails.push(`Sub: "${subKeyword}" (${result.matchType}, +${Math.floor(result.score * 1.5)})`);
+              const score = result.score * 1.5;
+              subcategoryScore += score;
+              if (!subcategoryKeywords.some(m => m.keyword === subKeyword)) {
+                subcategoryKeywords.push({
+                  keyword: subKeyword,
+                  source: 'subcategory',
+                  sourceName: subcategory.name,
+                  matchType: result.matchType,
+                  score: Math.floor(score),
+                });
+              }
+              continue;
             }
 
-            // También verificar en n-gramas
             for (const ngram of [...bigrams, ...trigrams]) {
               const ngramResult = matchKeyword(ngram, subKeyword);
               if (ngramResult.matches) {
-                subcategoryScore += ngramResult.score * 1.2;
-                subcategoryDetails.push(`Sub n-gram: "${subKeyword}" in "${ngram}" (+${Math.floor(ngramResult.score * 1.2)})`);
+                const score = ngramResult.score * 1.2;
+                subcategoryScore += score;
+                if (!subcategoryKeywords.some(m => m.keyword === subKeyword)) {
+                  subcategoryKeywords.push({
+                    keyword: subKeyword,
+                    source: 'subcategory',
+                    sourceName: subcategory.name,
+                    matchType: ngramResult.matchType,
+                    score: Math.floor(score),
+                  });
+                }
+                break;
               }
             }
           }
 
-          // Guardar la mejor subcategoría
           if (subcategoryScore > 0 && (!bestSubcategoryMatch || subcategoryScore > bestSubcategoryMatch.score)) {
             bestSubcategoryMatch = {
               id: subcategory.id,
               score: subcategoryScore,
-              details: subcategoryDetails
+              keywords: subcategoryKeywords,
             };
           }
         }
       }
     }
 
-    // Si hay coincidencias, agregar a la lista
     if (categoryScore > 0 || bestSubcategoryMatch) {
-      const totalScore = categoryScore + (bestSubcategoryMatch?.score || 0);
-      const allDetails = [
-        ...categoryMatchDetails,
-        ...(bestSubcategoryMatch?.details || [])
-      ];
-
       matches.push({
         categoryId: category.id,
         subcategoryId: bestSubcategoryMatch?.id,
-        score: totalScore,
-        matchDetails: allDetails
+        score: categoryScore + (bestSubcategoryMatch?.score || 0),
+        matchedKeywords: [
+          ...matchedKeywords,
+          ...(bestSubcategoryMatch?.keywords || []),
+        ],
       });
     }
   }
 
-  // Si no hay coincidencias, retornar null
   if (matches.length === 0) {
     return null;
   }
 
-  // Ordenar por puntuación (mayor a menor)
   matches.sort((a, b) => b.score - a.score);
-
   const bestMatch = matches[0];
-  
-  // Calcular confianza (0-1) basada en la puntuación
-  // Puntuaciones típicas: 10-50 (baja), 50-100 (media), 100+ (alta)
   const confidence = Math.min(bestMatch.score / 150, 1);
-
-  // Log para debugging (solo en desarrollo)
-  if (process.env.NODE_ENV === 'development' && confidence > 0.5) {
-    console.log(`✅ Categorized: "${description.substring(0, 50)}..." → ${bestMatch.categoryId}${bestMatch.subcategoryId ? `/${bestMatch.subcategoryId}` : ''} (confidence: ${(confidence * 100).toFixed(1)}%)`);
-    console.log(`   Matches: ${bestMatch.matchDetails.join(', ')}`);
-  }
 
   return {
     categoryId: bestMatch.categoryId,
     subcategoryId: bestMatch.subcategoryId,
-    confidence
+    confidence,
+    matchedKeywords: bestMatch.matchedKeywords.sort((a, b) => b.score - a.score),
   };
+};
+
+/**
+ * Explica qué keywords de una categoría (o del mejor match) coinciden con la descripción.
+ */
+export const explainDescriptionMatch = (
+  description: string,
+  categories: Category[],
+  preferredCategoryId?: string
+): CategorizationResult | null => {
+  const result = categorizeTransaction(description, categories);
+  if (!result) return null;
+
+  if (preferredCategoryId && preferredCategoryId !== result.categoryId) {
+    const preferred = categories.find(c => c.id === preferredCategoryId);
+    if (!preferred) return result;
+
+    const normalizedDesc = normalizeText(description);
+    const matchedKeywords: KeywordMatchInfo[] = [];
+
+    for (const keyword of preferred.keywords || []) {
+      const match = matchKeyword(normalizedDesc, keyword);
+      if (match.matches) {
+        matchedKeywords.push({
+          keyword,
+          source: 'category',
+          sourceName: preferred.name,
+          matchType: match.matchType,
+          score: match.score,
+        });
+      }
+    }
+
+    for (const subcategory of preferred.subcategories || []) {
+      for (const keyword of subcategory.keywords || []) {
+        const match = matchKeyword(normalizedDesc, keyword);
+        if (match.matches) {
+          matchedKeywords.push({
+            keyword,
+            source: 'subcategory',
+            sourceName: subcategory.name,
+            matchType: match.matchType,
+            score: Math.floor(match.score * 1.5),
+          });
+        }
+      }
+    }
+
+    if (matchedKeywords.length === 0) return result;
+
+    return {
+      categoryId: preferredCategoryId,
+      confidence: result.confidence,
+      matchedKeywords: matchedKeywords.sort((a, b) => b.score - a.score),
+    };
+  }
+
+  return result;
 };
 
 /**

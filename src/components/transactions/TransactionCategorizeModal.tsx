@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Transaction, Account, Category } from '../../types';
-import { learnFromManualClassification } from '../../utils/categorization';
+import { explainDescriptionMatch, learnFromManualClassification } from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
 interface TransactionCategorizeModalProps {
@@ -13,6 +13,13 @@ interface TransactionCategorizeModalProps {
   getCategoryName: (categoryId: string) => string;
   getCategoryColor: (categoryId: string) => string;
 }
+
+const matchTypeLabel: Record<string, string> = {
+  exact: 'exacto',
+  partial: 'parcial',
+  regex: 'regex',
+  fuzzy: 'aproximado',
+};
 
 export const TransactionCategorizeModal = ({
   transaction,
@@ -61,6 +68,15 @@ export const TransactionCategorizeModal = ({
     setSuggestedKeywords(keywords);
     setSelectedKeywords([]);
   }, [transaction, categoryId, categories]);
+
+  const matchedPattern = useMemo(() => {
+    if (!transaction || !isOpen) return null;
+    return explainDescriptionMatch(
+      transaction.description,
+      categories,
+      transaction.category || categoryId || undefined
+    );
+  }, [transaction, isOpen, categories, categoryId]);
 
   if (!isOpen || !transaction) return null;
 
@@ -124,7 +140,6 @@ export const TransactionCategorizeModal = ({
             </button>
           </div>
 
-          {/* Detalles */}
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6 space-y-3">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -189,9 +204,48 @@ export const TransactionCategorizeModal = ({
                 </span>
               </div>
             )}
+
+            {matchedPattern && matchedPattern.matchedKeywords.length > 0 && (
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+                <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  Patrón que coincidió
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2">
+                  Regla(s) de autoclasificación que matchean esta descripción
+                  {matchedPattern.confidence > 0
+                    ? ` · confianza ${(matchedPattern.confidence * 100).toFixed(0)}%`
+                    : ''}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {matchedPattern.matchedKeywords.map(match => (
+                    <span
+                      key={`${match.source}-${match.sourceName}-${match.keyword}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
+                      title={`En ${match.sourceName} (${matchTypeLabel[match.matchType] || match.matchType})`}
+                    >
+                      <span className="font-semibold">“{match.keyword}”</span>
+                      <span className="opacity-70">
+                        → {match.sourceName}
+                        {match.matchType !== 'exact' ? ` · ${matchTypeLabel[match.matchType]}` : ''}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {transaction.category &&
+              matchedPattern &&
+              matchedPattern.matchedKeywords.length === 0 && (
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  No se encontró una regla activa que explique esta categoría con la descripción actual
+                  (pudo haberse asignado a mano o con una regla que después se cambió).
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Categoría */}
           <div className="mb-6">
             <label className="label">Categoría</label>
             <select
@@ -207,7 +261,6 @@ export const TransactionCategorizeModal = ({
             </select>
           </div>
 
-          {/* Reglas de autoclasificación */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <input
@@ -225,7 +278,7 @@ export const TransactionCategorizeModal = ({
             {addRules && (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Palabras clave para identificar transacciones similares automáticamente:
+                  Palabras clave sugeridas para guardar como reglas nuevas (no son el patrón que ya coincidió):
                 </p>
                 {suggestedKeywords.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
