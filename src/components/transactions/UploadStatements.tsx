@@ -5,7 +5,7 @@ import { useModal } from '../../hooks/useModal';
 import { getAccounts, recalculateAccountBalance, migrateLegacyPrexCurrencySplits } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
 import { getCategories } from '../../services/categories.service';
-import { createTransactions, parsedToTransaction, deleteTransactionsByFilter } from '../../services/transactions.service';
+import { createTransactions, parsedToTransaction, deleteTransactionsByFilter, deleteTransactionsForUpload } from '../../services/transactions.service';
 import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory, deleteUploadHistoryByFilter } from '../../services/uploadHistory.service';
 import { getExchangeRates, DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
 import { calculateFileHash } from '../../parsers/fileHasher';
@@ -76,6 +76,30 @@ const BankDownloadHelp = ({ bank }: { bank: string }) => {
   );
 };
 
+const ExtractDeleteButton = ({
+  disabled,
+  onClick,
+}: {
+  disabled?: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation();
+      onClick();
+    }}
+    disabled={disabled}
+    className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 disabled:opacity-40"
+    title="Eliminar esta carga y sus transacciones"
+    aria-label="Eliminar extracto"
+  >
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  </button>
+);
+
 export const UploadStatements = () => {
   const { user } = useAuth();
   const { showSuccess, showError, showConfirm, ModalComponent } = useModal();
@@ -107,6 +131,7 @@ export const UploadStatements = () => {
   const [useSmartParser, setUseSmartParser] = useState(true);
   const [detectedBank, setDetectedBank] = useState<string | null>(null);
   const [forceUpload, setForceUpload] = useState(false);
+  const [deletingUploadId, setDeletingUploadId] = useState<string | null>(null);
   const [result, setResult] = useState<{
     success: boolean;
     message: string;
@@ -468,6 +493,45 @@ export const UploadStatements = () => {
         } catch (err) {
           console.error(err);
           showError(err instanceof Error ? err.message : 'Error al marcar sin movimientos');
+        }
+      },
+    });
+  };
+
+  const handleDeleteExtract = (account: Account, upload: UploadHistory) => {
+    const isSnapshot = upload.mode === 'snapshot' || upload.statementMonth < 1;
+    const periodLabel = isSnapshot
+      ? 'el último snapshot'
+      : `${monthNames[upload.statementMonth - 1]} ${upload.statementYear}`;
+    const countLabel = upload.transactionsCount > 0
+      ? `${upload.transactionsCount} transacción(es)`
+      : 'las transacciones';
+
+    showConfirm({
+      title: 'Eliminar extracto',
+      message: `Se eliminarán ${countLabel} de "${account.name}" (${periodLabel}) y el extracto quedará como pendiente. El saldo se recalculará. ¿Continuar?`,
+      confirmText: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          setDeletingUploadId(upload.id);
+          const deletedTx = await deleteTransactionsForUpload(upload);
+          if (isSnapshot) {
+            await deleteUploadHistoryByFilter({ accountId: account.id });
+          } else {
+            await deleteUploadHistory(upload.id);
+          }
+          await recalculateAccountBalance(account.id);
+          await loadData();
+          showSuccess(
+            deletedTx > 0
+              ? `Eliminadas ${deletedTx} transacciones de ${account.name}`
+              : `Extracto de ${account.name} eliminado`
+          );
+        } catch (err) {
+          console.error(err);
+          showError('No se pudo eliminar el extracto');
+        } finally {
+          setDeletingUploadId(null);
         }
       },
     });
@@ -1262,13 +1326,21 @@ export const UploadStatements = () => {
                             </button>
                           )}
                         </div>
-                        <span
-                          className={`text-xl flex-shrink-0 ${
-                            hasExtract ? 'text-green-500' : 'text-orange-400'
-                          }`}
-                        >
-                          {covered ? '✓' : '☐'}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          {hasExtract && upload && (
+                            <ExtractDeleteButton
+                              disabled={deletingUploadId === upload.id}
+                              onClick={() => handleDeleteExtract(account, upload)}
+                            />
+                          )}
+                          <span
+                            className={`text-xl ${
+                              hasExtract ? 'text-green-500' : 'text-orange-400'
+                            }`}
+                          >
+                            {covered ? '✓' : '☐'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1366,16 +1438,24 @@ export const UploadStatements = () => {
                               </>
                             )}
                           </div>
-                          <span
-                            className={`text-xl flex-shrink-0 ${
-                              hasExtract ? 'text-green-500' : noMovements ? 'text-blue-500' : 'text-orange-400'
-                            }`}
-                            title={
-                              hasExtract ? 'Extracto subido' : noMovements ? 'Sin movimientos' : 'Extracto pendiente'
-                            }
-                          >
-                            {covered ? '✓' : '☐'}
-                          </span>
+                          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            {hasExtract && upload && (
+                              <ExtractDeleteButton
+                                disabled={deletingUploadId === upload.id}
+                                onClick={() => handleDeleteExtract(account, upload)}
+                              />
+                            )}
+                            <span
+                              className={`text-xl ${
+                                hasExtract ? 'text-green-500' : noMovements ? 'text-blue-500' : 'text-orange-400'
+                              }`}
+                              title={
+                                hasExtract ? 'Extracto subido' : noMovements ? 'Sin movimientos' : 'Extracto pendiente'
+                              }
+                            >
+                              {covered ? '✓' : '☐'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1394,7 +1474,8 @@ export const UploadStatements = () => {
 
           <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <p className="text-sm text-blue-800 dark:text-blue-300">
-              💡 <strong>Tip:</strong> Mensuales: clic en ✓ para ver, doble clic en ☐ para cargar, o “sin movimientos”.
+              💡 <strong>Tip:</strong> Mensuales: clic en ✓ para ver, ícono de basura para borrar la carga,
+              doble clic en ☐ para cargar, o “sin movimientos”.
               Snapshots (BHU/IBM): actualizá cuando quieras; cada carga reemplaza el estado anterior.
             </p>
           </div>

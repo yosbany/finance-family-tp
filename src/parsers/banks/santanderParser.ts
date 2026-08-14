@@ -183,12 +183,17 @@ export const parseSantanderExcel = (data: any[]): ParsedTransaction[] => {
   console.log('🏦 Iniciando parser de Santander Excel');
   console.log('🏦 Total de filas:', data.length);
 
+  // No usar la palabra "tarjeta": en débito aparece en "COMPRA CON TARJETA DEBITO".
   let isCreditCard = false;
   for (let i = 0; i < Math.min(data.length, 25); i++) {
     const row = data[i];
     if (Array.isArray(row)) {
-      const rowStr = row.join('|').toLowerCase();
-      if (rowStr.includes('tarjeta') || rowStr.includes('limite de credito') || rowStr.includes('detalle')) {
+      const rowStr = row.join('|').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const looksLikeCreditHeader =
+        rowStr.includes('limite de credito') ||
+        (rowStr.includes('detalle') &&
+          (rowStr.includes('importe $') || rowStr.includes('importe u$s') || rowStr.includes('importe us$')));
+      if (looksLikeCreditHeader) {
         isCreditCard = true;
         console.log('💳 Detectado: Archivo de Tarjeta de Crédito');
         break;

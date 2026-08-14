@@ -193,6 +193,36 @@ export const deleteTransactionsByFilter = async (filter: {
   return toDelete.length;
 };
 
+/** Borra las transacciones de una carga de extracto (por uploadId; fallback legado sin uploadId). */
+export const deleteTransactionsForUpload = async (upload: {
+  id: string;
+  accountId: string;
+  statementMonth: number;
+  statementYear: number;
+  mode?: 'monthly' | 'snapshot';
+}): Promise<number> => {
+  const transactions = await getTransactions();
+  const isSnapshot = upload.mode === 'snapshot' || upload.statementMonth < 1;
+
+  const toDelete = transactions.filter(tx => {
+    if (tx.accountId !== upload.accountId) return false;
+    if (tx.uploadId === upload.id) return true;
+    if (tx.uploadId) return false;
+    if (isSnapshot) return true;
+    const date = new Date(tx.date);
+    return (
+      date.getMonth() + 1 === upload.statementMonth &&
+      date.getFullYear() === upload.statementYear
+    );
+  });
+
+  for (const tx of toDelete) {
+    await deleteTransaction(tx.id);
+  }
+
+  return toDelete.length;
+};
+
 export const deleteTransactionsByIds = async (ids: string[]): Promise<number> => {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   for (const id of uniqueIds) {

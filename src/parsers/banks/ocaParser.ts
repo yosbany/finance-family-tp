@@ -3,7 +3,7 @@ import { parseStatementAmount } from '../../utils/parseAmount';
 
 /**
  * Parser para extractos de OCA (Organización de Crédito Automático)
- * Soporta tarjetas Visa y Mastercard
+ * Soporta tarjetas Visa y Mastercard — resumen PDF "Julio/2026" etc.
  */
 
 const MONTH_NAMES = [
@@ -17,7 +17,6 @@ const HEADER_NOISE = [
   'próximo cierre',
   'proximo cierre',
   'total compras',
-  'seguro de vida',
   'ajuste por redondeo',
   'interés bonificable',
   'interes bonificable',
@@ -53,14 +52,15 @@ export const parseOCAMasterCSV = (content: string): ParsedTransaction[] => {
 
     if (isNaN(date.getTime())) continue;
 
-    const amount = -Math.abs(parseFloat(importe.replace(/\./g, '').replace(',', '.')));
+    const amountValue = parseStatementAmount(importe);
+    if (amountValue === null || amountValue === 0) continue;
 
     transactions.push({
       date,
       description: comercio,
-      amount,
+      amount: Math.abs(amountValue),
       currency: 'UYU',
-      type: 'expense'
+      type: amountValue < 0 ? 'income' : 'expense',
     });
   }
 
@@ -87,15 +87,17 @@ export const parseOCAVisaCSV = (content: string): ParsedTransaction[] => {
 
     if (isNaN(date.getTime())) continue;
 
-    const amount = -Math.abs(parseFloat(importe.replace(/\./g, '').replace(',', '.')));
-    const currency: Currency = moneda === 'USD' ? 'USD' : 'UYU';
+    const amountValue = parseStatementAmount(importe);
+    if (amountValue === null || amountValue === 0) continue;
+
+    const currency: Currency = moneda === 'USD' || moneda === 'U$S' ? 'USD' : 'UYU';
 
     transactions.push({
       date,
       description: comercio,
-      amount,
+      amount: Math.abs(amountValue),
       currency,
-      type: 'expense'
+      type: amountValue < 0 ? 'income' : 'expense',
     });
   }
 
@@ -104,6 +106,7 @@ export const parseOCAVisaCSV = (content: string): ParsedTransaction[] => {
 
 /**
  * Quita encabezados de página y el pie del resumen OCA (vencimientos, totales, etc.).
+ * Conserva movimientos + seguro de vida (antes de TOTAL COMPRAS DEL MES).
  */
 const cleanOCAPDFText = (text: string): string => {
   let cleaned = text.replace(/\s+/g, ' ');
@@ -114,36 +117,52 @@ const cleanOCAPDFText = (text: string): string => {
     ' '
   );
 
-  // Cortar desde totales / pie (no son movimientos)
+  // Pie de página 2: totales / financiación (no movimientos)
   const footerMatch = cleaned.search(
-    /Total compras tarjeta|TOTAL COMPRAS DEL MES|Próximo cierre|Próximo vencimiento|Proximo cierre|Proximo vencimiento/i
+    /TOTAL COMPRAS DEL MES|Inter[eé]s bonificable|Pago Total en\s*\$|Próximo cierre|Próximo vencimiento|Proximo cierre|Proximo vencimiento/i
   );
   if (footerMatch >= 0) {
     cleaned = cleaned.slice(0, footerMatch);
   }
 
+  // "Total compras tarjeta …" es un subtotal: cortar ahí pero dejar que el seguro
+  // se capture aparte desde el texto original.
   return cleaned.replace(/\s+/g, ' ').trim();
 };
 
-const resolveStatementPeriod = (text: string): { month: number; year: number } => {
+const resolveStatementPeriod = (text: string): { month: number; year: number; closeDate: Date } => {
   const monthYearMatch = text.match(
     /(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\/(\d{4})/i
   );
+  let month = new Date().getMonth() + 1;
+  let year = new Date().getFullYear();
   if (monthYearMatch) {
     const monthIndex = MONTH_NAMES.findIndex(
       m => m.toLowerCase() === monthYearMatch[1].toLowerCase()
     );
     if (monthIndex >= 0) {
-      return { month: monthIndex + 1, year: parseInt(monthYearMatch[2], 10) };
+      month = monthIndex + 1;
+      year = parseInt(monthYearMatch[2], 10);
     }
   }
-  const now = new Date();
-  return { month: now.getMonth() + 1, year: now.getFullYear() };
+
+  const closeMatch = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const closeDate = closeMatch
+    ? new Date(
+        parseInt(closeMatch[3], 10),
+        parseInt(closeMatch[2], 10) - 1,
+        parseInt(closeMatch[1], 10)
+      )
+    : new Date(year, month, 0);
+
+  return { month, year, closeDate };
 };
 
 /**
- * Parser para texto extraído de PDF de OCA.
- * Formato típico: `26/ 3  09  APPLE.COM/BILL  3/ 3  26,67 US Dollar  79,99`
+ * Parser para texto extraído de PDF de OCA Mastercard/Visa.
+ * Formato: `30/ 6 09 SPOTIFY 8,99 US Dollar 8,99`
+ *          `3/ 7 09 Su Pago .......... * -19.679,00` (pesos)
+ *          `3/ 7 09 Su Pago .......... -220,00 *` (dólares)
  */
 export const parseOCAPDFText = (text: string): ParsedTransaction[] => {
   const period = resolveStatementPeriod(text);
@@ -166,11 +185,24 @@ export const parseOCAPDFText = (text: string): ParsedTransaction[] => {
   for (let i = 0; i < starts.length; i++) {
     const current = starts[i];
     const next = starts[i + 1];
-    const chunk = body.slice(current.end, next ? next.index : body.length).trim();
+    let chunk = body.slice(current.end, next ? next.index : body.length).trim();
     if (!chunk) continue;
 
-    const usdMatch = chunk.match(
+    // No mezclar con el subtotal de la tarjeta
+    const totalCut = chunk.search(/Total compras tarjeta/i);
+    if (totalCut >= 0) chunk = chunk.slice(0, totalCut).trim();
+    if (!chunk) continue;
+
+    const usdInline = chunk.match(
       /(-?[\d.]+,\d{2})\s+US\s+Dollar\s+(-?[\d.]+,\d{2})\s*\*?$/i
+    );
+    // Su Pago en USD: asterisco DESPUÉS del monto
+    const pagoUsd = chunk.match(
+      /\bSu\s+Pago\b[\s.]*(-?[\d.]+,\d{2})\s*\*\s*$/i
+    );
+    // Su Pago en pesos: asterisco ANTES del monto
+    const pagoUyu = chunk.match(
+      /\bSu\s+Pago\b[\s.]*\*\s*(-?[\d.]+,\d{2})\s*$/i
     );
     const amountMatch = chunk.match(/\*?\s*(-?[\d.]+,\d{2})\s*\*?\s*$/);
 
@@ -178,10 +210,18 @@ export const parseOCAPDFText = (text: string): ParsedTransaction[] => {
     let amountRaw: string | null = null;
     let descEnd = -1;
 
-    if (usdMatch && usdMatch.index !== undefined) {
+    if (usdInline && usdInline.index !== undefined) {
       currency = 'USD';
-      amountRaw = usdMatch[1];
-      descEnd = usdMatch.index;
+      amountRaw = usdInline[1];
+      descEnd = usdInline.index;
+    } else if (pagoUsd && pagoUsd.index !== undefined) {
+      currency = 'USD';
+      amountRaw = pagoUsd[1];
+      descEnd = pagoUsd.index;
+    } else if (pagoUyu && pagoUyu.index !== undefined) {
+      currency = 'UYU';
+      amountRaw = pagoUyu[1];
+      descEnd = pagoUyu.index;
     } else if (amountMatch && amountMatch.index !== undefined) {
       amountRaw = amountMatch[1];
       descEnd = amountMatch.index;
@@ -189,18 +229,32 @@ export const parseOCAPDFText = (text: string): ParsedTransaction[] => {
       continue;
     }
 
-    let description = chunk
-      .slice(0, descEnd)
-      .replace(/\s+\d+\s*\/\s*\d+\s*$/, '')
-      .replace(/\*+/g, ' ')
-      .replace(/\.+/g, '.')
+    let description = chunk.slice(0, descEnd).trim();
+
+    // Conservar cuotas N/M en la descripción
+    const cuota = description.match(/(\d+)\s*\/\s*(\d+)\s*$/);
+    let cuotaLabel = '';
+    if (cuota) {
+      cuotaLabel = ` (${cuota[1]}/${cuota[2]})`;
+      description = description.slice(0, cuota.index).trim();
+    }
+
+    // Limpiar puntos de "Su Pago ........" sin tocar comercios MERPAGO*
+    description = description
+      .replace(/\.{2,}/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+
+    if (/\bsu\s+pago\b/i.test(chunk)) {
+      description = 'Su Pago';
+    } else {
+      description = `${description}${cuotaLabel}`.trim();
+    }
 
     if (!description || isNoiseDescription(description)) continue;
 
     const amountValue = parseStatementAmount(amountRaw);
-    if (amountValue === null || !Number.isFinite(amountValue)) continue;
+    if (amountValue === null || !Number.isFinite(amountValue) || amountValue === 0) continue;
 
     let year = period.year;
     if (current.month > period.month) {
@@ -210,22 +264,32 @@ export const parseOCAPDFText = (text: string): ParsedTransaction[] => {
     const date = new Date(year, current.month - 1, current.day);
     if (isNaN(date.getTime())) continue;
 
-    const isPago =
-      /\bsu\s+pago\b/i.test(description) ||
-      /\*\s*-?[\d.]+,\d{2}\s*$|-?[\d.]+,\d{2}\s*\*\s*$/.test(chunk);
-
-    const amount = isPago ? Math.abs(amountValue) : -Math.abs(amountValue);
+    const isPago = description === 'Su Pago' || amountValue < 0;
 
     transactions.push({
       date,
       description,
-      amount,
+      amount: Math.abs(amountValue),
       currency,
       type: isPago ? 'income' : 'expense',
     });
   }
 
-  console.log(`✅ OCA: ${transactions.length} transacciones parseadas`);
+  // Seguro de vida (cargo del resumen, suele ir después de Total compras tarjeta)
+  const seguroMatch = text.match(/Seguro de vida sobre saldo\s+(-?[\d.]+,\d{2})/i);
+  if (seguroMatch) {
+    const amountValue = parseStatementAmount(seguroMatch[1]);
+    if (amountValue !== null && amountValue !== 0) {
+      transactions.push({
+        date: period.closeDate,
+        description: 'Seguro de vida sobre saldo',
+        amount: Math.abs(amountValue),
+        currency: 'UYU',
+        type: 'expense',
+      });
+    }
+  }
+
   return transactions;
 };
 
@@ -275,14 +339,15 @@ export const parseOCAExcel = (data: unknown[]): ParsedTransaction[] => {
 
     if (isNaN(date.getTime())) continue;
 
-    const amount = -Math.abs(Number(importe));
+    const amountValue = Number(importe);
+    if (!Number.isFinite(amountValue) || amountValue === 0) continue;
 
     transactions.push({
       date,
       description: comercio,
-      amount,
+      amount: Math.abs(amountValue),
       currency: 'UYU',
-      type: 'expense'
+      type: amountValue < 0 ? 'income' : 'expense',
     });
   }
 
