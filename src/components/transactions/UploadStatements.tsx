@@ -78,9 +78,11 @@ const BankDownloadHelp = ({ bank }: { bank: string }) => {
 
 const ExtractDeleteButton = ({
   disabled,
+  busy,
   onClick,
 }: {
   disabled?: boolean;
+  busy?: boolean;
   onClick: () => void;
 }) => (
   <button
@@ -89,14 +91,18 @@ const ExtractDeleteButton = ({
       e.stopPropagation();
       onClick();
     }}
-    disabled={disabled}
+    disabled={disabled || busy}
     className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 disabled:opacity-40"
     title="Eliminar esta carga y sus transacciones"
     aria-label="Eliminar extracto"
   >
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
+    {busy ? (
+      <span className="block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    ) : (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    )}
   </button>
 );
 
@@ -511,28 +517,30 @@ export const UploadStatements = () => {
       title: 'Eliminar extracto',
       message: `Se eliminarán ${countLabel} de "${account.name}" (${periodLabel}) y el extracto quedará como pendiente. El saldo se recalculará. ¿Continuar?`,
       confirmText: 'Eliminar',
-      onConfirm: async () => {
-        try {
-          setDeletingUploadId(upload.id);
-          const deletedTx = await deleteTransactionsForUpload(upload);
-          if (isSnapshot) {
-            await deleteUploadHistoryByFilter({ accountId: account.id });
-          } else {
-            await deleteUploadHistory(upload.id);
+      onConfirm: () => {
+        setDeletingUploadId(upload.id);
+        void (async () => {
+          try {
+            const deletedTx = await deleteTransactionsForUpload(upload);
+            if (isSnapshot) {
+              await deleteUploadHistoryByFilter({ accountId: account.id });
+            } else {
+              await deleteUploadHistory(upload.id);
+            }
+            await recalculateAccountBalance(account.id);
+            await loadData();
+            showSuccess(
+              deletedTx > 0
+                ? `Eliminadas ${deletedTx} transacciones de ${account.name}`
+                : `Extracto de ${account.name} eliminado`
+            );
+          } catch (err) {
+            console.error(err);
+            showError('No se pudo eliminar el extracto');
+          } finally {
+            setDeletingUploadId(null);
           }
-          await recalculateAccountBalance(account.id);
-          await loadData();
-          showSuccess(
-            deletedTx > 0
-              ? `Eliminadas ${deletedTx} transacciones de ${account.name}`
-              : `Extracto de ${account.name} eliminado`
-          );
-        } catch (err) {
-          console.error(err);
-          showError('No se pudo eliminar el extracto');
-        } finally {
-          setDeletingUploadId(null);
-        }
+        })();
       },
     });
   };
@@ -670,7 +678,7 @@ export const UploadStatements = () => {
     trackingSearch,
   ]);
 
-  if (loading) {
+  if (loading && !deletingUploadId) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <LoadingSpinner size="lg" />
@@ -1329,7 +1337,8 @@ export const UploadStatements = () => {
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                           {hasExtract && upload && (
                             <ExtractDeleteButton
-                              disabled={deletingUploadId === upload.id}
+                              disabled={!!deletingUploadId}
+                              busy={deletingUploadId === upload.id}
                               onClick={() => handleDeleteExtract(account, upload)}
                             />
                           )}
@@ -1441,7 +1450,8 @@ export const UploadStatements = () => {
                           <div className="flex flex-col items-end gap-1 flex-shrink-0">
                             {hasExtract && upload && (
                               <ExtractDeleteButton
-                                disabled={deletingUploadId === upload.id}
+                                disabled={!!deletingUploadId}
+                                busy={deletingUploadId === upload.id}
                                 onClick={() => handleDeleteExtract(account, upload)}
                               />
                             )}
@@ -1477,6 +1487,19 @@ export const UploadStatements = () => {
               💡 <strong>Tip:</strong> Mensuales: clic en ✓ para ver, ícono de basura para borrar la carga,
               doble clic en ☐ para cargar, o “sin movimientos”.
               Snapshots (BHU/IBM): actualizá cuando quieras; cada carga reemplaza el estado anterior.
+            </p>
+          </div>
+        </div>
+      )}
+      {deletingUploadId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl px-8 py-6 flex flex-col items-center gap-3">
+            <LoadingSpinner size="lg" />
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+              Eliminando extracto…
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Esto puede tardar si hay muchas transacciones
             </p>
           </div>
         </div>
