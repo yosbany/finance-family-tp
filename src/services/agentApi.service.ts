@@ -1,25 +1,29 @@
 /**
  * Agent API Service
  * 
- * Cliente para comunicarse con el servidor agent API (Cloud Functions).
+ * Cliente para comunicarse con el servicio backend REST.
  * 
  * ARQUITECTURA:
  * - React obtiene ID Token del usuario autenticado
- * - Envía ID Token en Authorization header
- * - Server verifica token y extrae uid
- * - Server ejecuta herramientas con uid verificado
- * - Retorna resultado sanitizado
+ * - Envía ID Token en Authorization header (Bearer token)
+ * - Server verifica token y extrae uid desde Firebase Admin
+ * - Server ejecuta herramientas con uid del contexto verificado
+ * - Retorna resultado sanitizado (sin identidades, paths, credenciales)
  * 
  * SEGURIDAD:
- * - El token se obtiene de Firebase Auth (verificado)
- * - Nunca se envía uid desde el cliente
+ * - El token se obtiene de Firebase Auth (verificado en cliente)
+ * - El servidor lo verifica nuevamente con Firebase Admin SDK
+ * - Nunca se envía uid desde el cliente (extraído del token en servidor)
  * - El servidor es la única fuente de verdad para identidad
+ * - Todos los parámetros validados en servidor
  */
 
 import { auth } from './firebase';
 
-// IMPORTANTE: Cambiar a URL de functions reales en producción
-const AGENT_API_BASE_URL = process.env.VITE_AGENT_API_URL || 'http://localhost:5001/finance-family-tp/us-east1';
+// URL del backend REST
+// En desarrollo: http://localhost:3001
+// En producción: https://service.nrdonline.site
+const AGENT_API_BASE_URL = process.env.VITE_FINANCE_API_URL || 'http://127.0.0.1:3001';
 
 export interface SearchTransactionsParams {
   from?: number;
@@ -71,7 +75,15 @@ async function getIdToken(): Promise<string> {
 }
 
 /**
- * Llama al endpoint searchTransactions del servidor.
+ * Llama al endpoint POST /api/tools/search-transactions del servidor.
+ * 
+ * Flujo:
+ * 1. Obtiene ID Token del usuario autenticado en Firebase
+ * 2. Envía parámetros de búsqueda (sin UID)
+ * 3. Servidor verifica token y extrae UID
+ * 4. Servidor valida parámetros (rechaza injection attempts)
+ * 5. Servidor ejecuta búsqueda con UID del contexto verificado
+ * 6. Retorna resultado sanitizado
  */
 export async function callSearchTransactions(
   params: SearchTransactionsParams
@@ -79,8 +91,11 @@ export async function callSearchTransactions(
   try {
     const idToken = await getIdToken();
     
+    // HTTP POST /api/tools/search-transactions
+    // Content: JSON con parámetros de búsqueda (SIN uid/familyId/firebasePath)
+    // Auth: Bearer token in Authorization header
     const response = await fetch(
-      `${AGENT_API_BASE_URL}/searchTransactionsEndpoint`,
+      `${AGENT_API_BASE_URL}/api/tools/search-transactions`,
       {
         method: 'POST',
         headers: {
@@ -92,12 +107,16 @@ export async function callSearchTransactions(
     );
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to search transactions');
+      const errorData = await response.json();
+      const errorMessage = errorData.message || 
+                          errorData.error || 
+                          `HTTP ${response.status}`;
+      throw new Error(errorMessage);
     }
     
+    // Respuesta: {transactions: [...], pagination: {...}}
     const result = await response.json();
-    return result.result as SearchTransactionsResult;
+    return result as SearchTransactionsResult;
   } catch (error) {
     console.error('Error calling searchTransactions:', error);
     throw error;
