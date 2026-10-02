@@ -4,23 +4,20 @@ import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { getAccounts, recalculateAccountBalance, migrateLegacyPrexCurrencySplits } from '../../services/accounts.service';
 import { getOwners, Owner } from '../../services/owners.service';
-import { getCategories } from '../../services/categories.service';
-import { createTransactions, parsedToTransaction, deleteTransactionsByFilter, deleteTransactionsForUpload } from '../../services/transactions.service';
-import { createUploadHistory, checkDuplicateUpload, getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory, deleteUploadHistoryByFilter } from '../../services/uploadHistory.service';
+import { importStatement, StatementImportResult } from '../../services/importStatements.service';
+import { getUploadHistory, migrateOldUploads, markAccountNoMovements, deleteUploadHistory, deleteUploadHistoryByFilter } from '../../services/uploadHistory.service';
+import { deleteTransactionsForUpload } from '../../services/transactions.service';
 import { getExchangeRates, DEFAULT_EXCHANGE_RATES } from '../../services/settings.service';
-import { calculateFileHash } from '../../parsers/fileHasher';
-import { parseCSV } from '../../parsers/csvParser';
-import { parseExcel } from '../../parsers/excelParser';
-import { parsePDF } from '../../parsers/pdfParser';
-import { parseByBank, detectBank, getParserInfo } from '../../parsers/banks';
-import { categorizeTransactions } from '../../utils/categorization';
+import { detectBank, getParserInfo } from '../../parsers/banks';
 import { getOwnerBadgeClasses, getOwnerCardClasses } from '../../utils/ownerColors';
 import { getBankDownloadGuide } from '../../utils/bankDownloadGuides';
-import { isSnapshotBank, SNAPSHOT_STATEMENT_MONTH } from '../../utils/snapshotBanks';
+import { isSnapshotBank } from '../../utils/snapshotBanks';
 import { getClosedStatementPeriod, getClosedMonthsOfCurrentYear } from '../../utils/statementPeriod';
-import { Account, Category, ExchangeRates, Transaction, UploadHistory } from '../../types';
+import { Account, ExchangeRates, UploadHistory } from '../../types';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import BankLogo from '../common/BankLogo';
+import { BatchUpload } from './batch/BatchUpload';
+import { BatchImportResult } from '../../types/batchImport';
 
 const BankDownloadHelp = ({ bank }: { bank: string }) => {
   const [open, setOpen] = useState(false);
@@ -118,6 +115,7 @@ export const UploadStatements = () => {
   const [selectedAccountType, setSelectedAccountType] = useState<'debit' | 'credit' | 'investment' | ''>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
+  const [showBatchUpload, setShowBatchUpload] = useState(false);
   
   // Statement period — por defecto el mes cerrado (mes anterior)
   const currentDate = new Date();
@@ -299,171 +297,56 @@ export const UploadStatements = () => {
       setProcessing(true);
       setResult(null);
 
-      // 1. Calcular hash del archivo
-      const fileHash = await calculateFileHash(file);
-
-      // 2. Verificar si ya fue cargado (mensuales). Snapshots se reemplazan a propósito.
-      const accountForDup = accounts.find(a => a.id === selectedAccount);
-      if (!forceUpload && accountForDup && !isSnapshotBank(accountForDup.bank)) {
-        const isDuplicate = await checkDuplicateUpload(fileHash);
-        if (isDuplicate) {
-          setResult({
-            success: false,
-            message: '⚠️ Este archivo ya fue cargado anteriormente. Si quieres volver a cargarlo, activa la opción "Forzar recarga" abajo.'
-          });
-          return;
-        }
-      }
-
-      // 3. Obtener información de la cuenta seleccionada
       const account = accounts.find(a => a.id === selectedAccount);
       if (!account) {
         throw new Error('Cuenta no encontrada');
       }
 
-      // 4. Parsear el archivo según su tipo
-      let parsedTransactions;
-      const fileName = file.name.toLowerCase();
-      
-      // Determinar el banco: usar el detectado o el de la cuenta seleccionada
-      const bankToUse = detectedBank || account.bank;
-      
-      // Intentar usar parser específico del banco si está habilitado
-      if (useSmartParser && bankToUse) {
-        try {
-          parsedTransactions = await parseByBank(
-            file,
-            bankToUse,
-            account.type,
-            account.currency,
-            exchangeRates
-          );
-          console.log(`✅ Usando parser específico para ${bankToUse} (${account.type})`);
-        } catch (error) {
-          console.warn(`⚠️ Error con parser de ${bankToUse}, usando parser genérico:`, error);
-          // Fallback a parsers genéricos
-          if (fileName.endsWith('.csv')) {
-            parsedTransactions = await parseCSV(file);
-          } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-            parsedTransactions = await parseExcel(file);
-          } else if (fileName.endsWith('.pdf')) {
-            parsedTransactions = await parsePDF(file);
-          } else {
-            throw new Error('Formato de archivo no soportado');
-          }
-        }
-      } else {
-        // Usar parsers genéricos
-        if (fileName.endsWith('.csv')) {
-          parsedTransactions = await parseCSV(file);
-        } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
-          parsedTransactions = await parseExcel(file);
-        } else if (fileName.endsWith('.pdf')) {
-          parsedTransactions = await parsePDF(file);
-        } else {
-          throw new Error('Formato de archivo no soportado');
-        }
-      }
-
-      if (parsedTransactions.length === 0) {
-        setResult({
-          success: false,
-          message: 'No se encontraron transacciones en el archivo.'
-        });
-        return;
-      }
-
-      // 5. Validar fechas / preparar snapshot
-      const warnings: string[] = [];
-      const snapshotMode = isSnapshotBank(account.bank);
-
-      if (!snapshotMode) {
-        let transactionsOutOfRange = 0;
-
-        parsedTransactions.forEach(pt => {
-          const txDate = new Date(pt.date);
-          const txMonth = txDate.getMonth() + 1;
-          const txYear = txDate.getFullYear();
-
-          if (txMonth !== statementMonth || txYear !== statementYear) {
-            transactionsOutOfRange++;
-          }
-        });
-
-        if (transactionsOutOfRange > 0) {
-          warnings.push(
-            `⚠️ ${transactionsOutOfRange} transacción(es) tienen fechas fuera del período seleccionado (${statementMonth}/${statementYear}). Verifica que sea el extracto correcto.`
-          );
-        }
-      } else {
-        // Snapshot: reemplaza el estado anterior de la cuenta (BHU / IBM no son mensuales)
-        await deleteTransactionsByFilter({ accountId: selectedAccount });
-        await deleteUploadHistoryByFilter({ accountId: selectedAccount });
-        warnings.push(
-          'Esta cuenta usa snapshot: se reemplazó el estado anterior con este extracto completo.'
-        );
-      }
-
-      // 6. Crear registro de carga
-      const uploadNow = new Date();
-      const uploadId = await createUploadHistory({
-        fileName: file.name,
-        fileHash,
-        uploadedBy: user.uid,
-        uploadDate: Date.now(),
+      // Delegar TODO el flujo de importación al servicio desacoplado
+      const importResult: StatementImportResult = await importStatement({
+        file,
         accountId: selectedAccount,
-        transactionsCount: parsedTransactions.length,
-        status: 'processed',
-        statementMonth: snapshotMode ? SNAPSHOT_STATEMENT_MONTH : statementMonth,
-        statementYear: snapshotMode ? uploadNow.getFullYear() : statementYear,
-        mode: snapshotMode ? 'snapshot' : 'monthly',
+        account,
+        statementMonth,
+        statementYear,
+        forceUpload,
+        exchangeRates,
+        overrideDetectedBank: detectedBank || undefined,
+        userId: user.uid, // Pasar UID para auditoría
+        allAccounts: accounts, // NUEVO (FASE 02): Pasar todas las cuentas para detección
       });
 
-      // 7. Convertir a transacciones
-      const transactions = parsedTransactions.map(pt =>
-        parsedToTransaction(pt, selectedAccount, uploadId)
-      );
-
-      // 8. Categorizar automáticamente
-      const categories = await getCategories();
-      const categorizedTransactions = categorizeTransactions(transactions, categories) as Omit<Transaction, 'id' | 'createdAt'>[];
-
-      // 9. Guardar en la base de datos
-      await createTransactions(categorizedTransactions);
-
-      // 10. Actualizar saldo de la cuenta con las nuevas transacciones
-      await recalculateAccountBalance(selectedAccount);
-
-      // 11. Calcular estadísticas
-      const categorized = categorizedTransactions.filter(t => t.status === 'classified').length;
-      const pending = categorizedTransactions.filter(t => t.status === 'pending').length;
-
+      // Mapear resultado del servicio a formato de UI
       setResult({
-        success: true,
-        message: `¡Archivo procesado exitosamente!`,
-        details: {
-          total: parsedTransactions.length,
-          categorized,
-          pending
-        },
-        warnings: warnings.length > 0 ? warnings : undefined
+        success: importResult.success,
+        message: importResult.success
+          ? `¡Archivo procesado exitosamente!`
+          : importResult.error || 'Error desconocido',
+        details: importResult.success
+          ? {
+              total: importResult.totalParsedTransactions,
+              categorized: importResult.transactionsCategorized,
+              pending: importResult.transactionsPending
+            }
+          : undefined,
+        warnings: importResult.warnings.length > 0 ? importResult.warnings : undefined
       });
 
-      // Recargar historial
-      await loadData();
+      // Si fue exitoso, recargar y redirigir
+      if (importResult.success) {
+        await loadData();
 
-      // Limpiar formulario
-      setFile(null);
-      setSelectedAccount('');
-      const fileInput = document.getElementById('file-input') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
+        // Limpiar formulario
+        setFile(null);
+        setSelectedAccount('');
+        const fileInput = document.getElementById('file-input') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
 
-      // Redirigir a la página de transacciones después de 2 segundos
-      // (siempre redirige, incluso si hay warnings)
-      setTimeout(() => {
-        navigate('/transactions');
-      }, 2000);
-
+        // Redirigir a transacciones después de 2 segundos
+        setTimeout(() => {
+          navigate('/transactions');
+        }, 2000);
+      }
     } catch (error: any) {
       console.error('Error al procesar archivo:', error);
       setResult({
@@ -757,6 +640,35 @@ export const UploadStatements = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Handle batch completion
+  const handleBatchComplete = async (result: BatchImportResult) => {
+    await loadData();
+  };
+
+  if (showBatchUpload) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h1 className="page-title-lg">
+            Carga Masiva de Extractos
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Carga múltiples extractos al mismo tiempo
+          </p>
+        </div>
+        
+        <BatchUpload
+          allAccounts={accounts}
+          onComplete={handleBatchComplete}
+          onCancel={() => {
+            setShowBatchUpload(false);
+            loadData();
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -766,6 +678,12 @@ export const UploadStatements = () => {
         <p className="text-gray-600 dark:text-gray-400 mt-1">
           Sigue los pasos para cargar tu estado de cuenta
         </p>
+        <button
+          onClick={() => setShowBatchUpload(true)}
+          className="text-primary hover:underline text-sm mt-2"
+        >
+          → O carga múltiples archivos a la vez
+        </button>
       </div>
 
       {/* Progress Steps */}

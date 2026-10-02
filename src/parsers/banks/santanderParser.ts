@@ -231,10 +231,31 @@ export const parseSantanderExcel = (data: any[]): ParsedTransaction[] => {
     const value = normalizeHeader(h);
     return value.includes('descripcion') || value.includes('tipo movimiento') || value.includes('concepto');
   });
-  const debitIndex = headers.findIndex((h: any) => normalizeHeader(h).includes('debito'));
-  const creditIndex = headers.findIndex((h: any) => normalizeHeader(h).includes('credito'));
+  // Nunca tomar "Saldo" / "Saldo crédito" como columna de movimiento
+  const debitIndex = headers.findIndex((h: any) => {
+    const value = normalizeHeader(h);
+    return value.includes('debito') && !value.includes('saldo');
+  });
+  const creditIndex = headers.findIndex((h: any) => {
+    const value = normalizeHeader(h);
+    return value.includes('credito') && !value.includes('saldo');
+  });
+  const saldoIndex = headers.findIndex((h: any) => normalizeHeader(h).includes('saldo'));
 
-  console.log('🏦 Índices de columnas:', { dateIndex, descIndex, debitIndex, creditIndex });
+  console.log('🏦 Índices de columnas:', { dateIndex, descIndex, debitIndex, creditIndex, saldoIndex });
+
+  if (dateIndex < 0 || descIndex < 0 || (debitIndex < 0 && creditIndex < 0)) {
+    throw new Error('Columnas Fecha / Descripción / Débito-Crédito no encontradas en el extracto Santander');
+  }
+
+  const looksLikeOutflow = (description: string) =>
+    /^(compra|debito operacion|pago de servicio|pago electronico|transf(?:erencia)?(?: instantanea)? enviada|servicio pac)/i.test(
+      description
+    );
+  const looksLikeInflow = (description: string) =>
+    /^(sueldos|credito operacion|transferencia recibida|transf(?:erencia)?.{0,40}recibida)/i.test(
+      description
+    );
 
   for (let i = headerRowIndex + 1; i < data.length; i++) {
     const row = data[i];
@@ -244,10 +265,12 @@ export const parseSantanderExcel = (data: any[]): ParsedTransaction[] => {
     try {
       const fechaValue = row[dateIndex];
       const descripcion = String(row[descIndex] || '').trim();
-      const debito = row[debitIndex];
-      const credito = row[creditIndex];
+      const debito = debitIndex >= 0 ? row[debitIndex] : '';
+      const credito = creditIndex >= 0 ? row[creditIndex] : '';
 
-      if (!fechaValue || !descripcion || descripcion === 'Saldo inicial') continue;
+      if (!fechaValue || !descripcion || descripcion === 'Saldo inicial' || descripcion === 'Saldo final') {
+        continue;
+      }
 
       let date: Date;
       if (typeof fechaValue === 'number') {
@@ -275,8 +298,25 @@ export const parseSantanderExcel = (data: any[]): ParsedTransaction[] => {
         amount = Math.abs(creditAmount);
         type = 'income';
       } else {
+        // No usar Saldo como monto: es el balance de la cuenta, no el movimiento
         continue;
       }
+
+      // Seguridad: no guardar el saldo corrido como si fuera el importe del movimiento
+      if (saldoIndex >= 0) {
+        const saldoAmount = parseStatementAmount(row[saldoIndex]);
+        if (
+          saldoAmount !== null &&
+          Math.abs(saldoAmount) === amount &&
+          looksLikeOutflow(descripcion) &&
+          type === 'income'
+        ) {
+          continue;
+        }
+      }
+
+      if (looksLikeOutflow(descripcion)) type = 'expense';
+      else if (looksLikeInflow(descripcion)) type = 'income';
 
       if (!Number.isFinite(amount) || amount === 0) continue;
 
