@@ -1,0 +1,37 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-functions-debug.log",
+        ".env"
+      ]
+    }
+  ],
+  "database": {
+    "rules": "firebase-rules.json"
+  },
+  "emulators": {
+    "auth": {
+      "host": "localhost",
+      "port": 9099
+    },
+    "database": {
+      "host": "localhost",
+      "port": 9000
+    },
+    "functions": {
+      "host": "localhost",
+      "port": 5001
+    },
+    "ui": {
+      "enabled": true,
+      "host": "localhost",
+      "port": 4000
+    }
+  }
+}
