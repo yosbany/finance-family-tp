@@ -16,6 +16,7 @@
 
 import { Account, Currency } from '../types';
 import { detectBank } from '../parsers/banks';
+import { isValidStatementPeriod } from '../utils/statementPeriod';
 
 /**
  * Estados posibles de resolución
@@ -62,13 +63,20 @@ export interface DetectedStatementContext {
  * Detecta período desde el nombre del archivo
  * 
  * Estrategia de prioridad:
- * 1. Nombres de mes explícitos (julio, junio, etc.)
- * 2. Patrones numéricos (YYYY-MM, YYYYMMDD, etc.)
+ * 1. Nombres de mes explícitos (julio, junio, etc.) — PRIORIDAD 1
+ * 2. Patrones numéricos bien delimitados (YYYY-MM, YYYYMMDD, etc.) — PRIORIDAD 2-4
+ * 3. Validación semántica: rechazar años inválidos — APLICAR A TODOS
+ * 
+ * NO aceptar candidatos que no pasen validación semántica.
+ * Ante duda → UNRESOLVED.
  */
-const detectPeriodFromFileName = (fileName: string): { month: number | null; year: number | null; evidence: string } => {
+const detectPeriodFromFileName = (
+  fileName: string,
+  uploadDate: Date = new Date()
+): { month: number | null; year: number | null; evidence: string } => {
   const lowerName = fileName.toLowerCase();
   
-  // Primero: Buscar meses explícitos
+  // PRIORIDAD 1: Buscar meses explícitos (julio, junio, etc.)
   const monthNames: Record<string, number> = {
     enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
     julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
@@ -80,32 +88,65 @@ const detectPeriodFromFileName = (fileName: string): { month: number | null; yea
     if (lowerName.includes(monthName)) {
       // Buscar año cercano
       const yearMatch = lowerName.match(/20\d{2}/);
-      const year = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
-      return { month: monthNum, year, evidence: `Month name "${monthName}" + year ${year}` };
+      const year = yearMatch ? parseInt(yearMatch[0]) : uploadDate.getFullYear();
+      
+      // Validar semánticamente
+      if (isValidStatementPeriod(monthNum, year, uploadDate)) {
+        return { month: monthNum, year, evidence: `Month name "${monthName}" + year ${year}` };
+      }
     }
   }
   
-  // Segundo: Patrones numéricos
+  // PRIORIDAD 2-4: Patrones numéricos
   // Patrones: 2026_01, 202601, V_202607, 07_2026, estado_cuenta_20260812
+  // 
+  // IMPORTANTE: Usar delimitadores más fuertes para evitar capturar
+  // números de cuenta como "010-85-193735-9"
+  
   const patterns = [
-    { regex: /(\d{4})[-_](\d{1,2})(?:[^0-9]|$)/, parser: (m: RegExpMatchArray) => ({ month: parseInt(m[2]), year: parseInt(m[1]) }), desc: 'YYYY-MM format' },
-    { regex: /(\d{1,2})[-_](\d{4})(?:[^0-9]|$)/, parser: (m: RegExpMatchArray) => ({ month: parseInt(m[1]), year: parseInt(m[2]) }), desc: 'MM-YYYY format' },
-    { regex: /(?:^|[a-zA-Z_])(\d{6})(?:[^0-9]|$)/, parser: (m: RegExpMatchArray) => {
-      // Pattern like V_202607 or just 202607 (YYYYMM without separator)
-      const d = m[1];
-      return { month: parseInt(d.substring(4, 6)), year: parseInt(d.substring(0, 4)) };
-    }, desc: 'YYYYMM format (e.g., V_202607)' },
-    { regex: /\b(\d{8})\b/, parser: (m: RegExpMatchArray) => {
-      const d = m[1];
-      return { month: parseInt(d.substring(4, 6)), year: parseInt(d.substring(0, 4)) };
-    }, desc: 'YYYYMMDD format' },
+    {
+      // YYYY-MM format: 2026_01, 2026-01
+      // Requiere: separador antes del primer dígito (inicio o carácter no numérico)
+      regex: /(?:^|[^0-9])(\d{4})[-_](\d{1,2})(?:[^0-9]|$)/,
+      parser: (m: RegExpMatchArray) => ({ month: parseInt(m[2]), year: parseInt(m[1]) }),
+      desc: 'YYYY-MM format',
+    },
+    {
+      // MM-YYYY format: 07_2026, 07-2026
+      // Requiere: separador, exactamente 4 dígitos para año
+      regex: /(?:^|[^0-9])(\d{1,2})[-_](\d{4})(?:[^0-9]|$)/,
+      parser: (m: RegExpMatchArray) => ({ month: parseInt(m[1]), year: parseInt(m[2]) }),
+      desc: 'MM-YYYY format',
+    },
+    {
+      // YYYYMM format: 202607, V_202607
+      // Requiere: carácter no numérico antes (letra o guion) + exactamente 6 dígitos
+      regex: /[a-zA-Z_](\d{6})(?:[^0-9]|$)/,
+      parser: (m: RegExpMatchArray) => {
+        const d = m[1];
+        return { month: parseInt(d.substring(4, 6)), year: parseInt(d.substring(0, 4)) };
+      },
+      desc: 'YYYYMM format (e.g., V_202607)',
+    },
+    {
+      // YYYYMMDD format: 20260812 (solo si está entre espacios o inicio/fin)
+      // Requiere: límite de palabra real (no dentro de número de cuenta)
+      regex: /(?:^|\s)(\d{8})(?:\s|$)/,
+      parser: (m: RegExpMatchArray) => {
+        const d = m[1];
+        return { month: parseInt(d.substring(4, 6)), year: parseInt(d.substring(0, 4)) };
+      },
+      desc: 'YYYYMMDD format',
+    },
   ];
   
   for (const { regex, parser, desc } of patterns) {
     const match = lowerName.match(regex);
     if (match) {
       const result = parser(match);
-      if (result.month >= 1 && result.month <= 12) {
+      
+      // VALIDACIÓN SEMÁNTICA: rechazar si no es válido
+      if (isValidStatementPeriod(result.month, result.year, uploadDate)) {
         return { ...result, evidence: desc };
       }
     }
@@ -363,8 +404,8 @@ export const detectStatementContext = async (options: {
   };
   
   try {
-    // 1. Detectar período desde nombre de archivo
-    const periodFromName = detectPeriodFromFileName(fileName);
+    // 1. Detectar período desde nombre de archivo (con validación semántica)
+    const periodFromName = detectPeriodFromFileName(fileName, uploadDate);
     if (periodFromName.month && periodFromName.year) {
       context.period = { month: periodFromName.month, year: periodFromName.year };
       context.resolution.period = 'RESOLVED';

@@ -1,3 +1,45 @@
+/**
+ * Rango válido de años para extractos financieros.
+ * 
+ * - Mínimo: 5 años atrás (es poco común tener extractos antiguos)
+ * - Máximo: año actual + 1 (para adelantos de años nuevos)
+ */
+export const getValidStatementYearRange = (now: Date = new Date()): { min: number; max: number } => {
+  const currentYear = now.getFullYear();
+  return {
+    min: currentYear - 5,
+    max: currentYear + 1,
+  };
+};
+
+/**
+ * Valida si un mes y año son válidos para un extracto.
+ * 
+ * Criterios:
+ * - month ∈ [1, 12]
+ * - year ∈ [currentYear - 5, currentYear + 1]
+ * 
+ * Rechaza claramente:
+ * - month = 0, 13, etc.
+ * - year = 3735, 85, etc.
+ */
+export const isValidStatementPeriod = (
+  month: number | null,
+  year: number | null,
+  now: Date = new Date()
+): boolean => {
+  if (!month || !year) return false;
+  
+  // Validar mes
+  if (month < 1 || month > 12) return false;
+  
+  // Validar año
+  const { min, max } = getValidStatementYearRange(now);
+  if (year < min || year > max) return false;
+  
+  return true;
+};
+
 /** Mes cerrado = el mes calendario anterior (extracto ya completo). */
 export const getClosedStatementPeriod = (now: Date = new Date()): { month: number; year: number } => {
   const closed = new Date(now.getFullYear(), now.getMonth() - 1, 1);
