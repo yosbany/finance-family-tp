@@ -21,9 +21,10 @@
 import { auth } from './firebase';
 
 // URL del backend REST
-// En desarrollo: http://localhost:3001
-// En producción: https://service.nrdonline.site
-const AGENT_API_BASE_URL = process.env.VITE_FINANCE_API_URL || 'http://127.0.0.1:3001';
+// En desarrollo: http://127.0.0.1:3001 (local)
+// En producción: https://service.nrdonline.site (VPS)
+// Configurado via: VITE_FINANCE_API_URL en .env
+const AGENT_API_BASE_URL = import.meta.env.VITE_FINANCE_API_URL || 'http://127.0.0.1:3001';
 
 export interface SearchTransactionsParams {
   from?: number;

@@ -1,0 +1,308 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    FINANCE FAMILY API - DEPLOYMENT PLAN                     ║
+║                           FASE 04C - PRODUCTION                             ║
+║                      systemd + Node.js + Nginx (No Docker)                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+PROJECT INFORMATION
+═══════════════════════════════════════════════════════════════════════════════
+Repository:               /Users/yosbanytejas/Documents/finance-family
+Backend Location:         /Users/yosbanytejas/Documents/finance-family/server
+Deployment Folder:        /Users/yosbanytejas/Documents/finance-family/deployment
+Backend Archive:          finance-family-backend.tar.gz (25M)
+
+VPS INFORMATION
+═══════════════════════════════════════════════════════════════════════════════
+Hostname:                 179.43.124.107
+Operating System:         Ubuntu 22.04.5 LTS
+SSH User:                 root
+Backend Port (internal):  8030
+Domain:                   service.nrdonline.site
+Protocol:                 HTTPS (Let's Encrypt)
+
+INFRASTRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+Application Directory:    /opt/finance-family-api
+Configuration Directory:  /etc/finance-family-api
+Service User:             finance-api (system user, no shell)
+Service File:             /etc/systemd/system/finance-family-api.service
+Environment File:         /etc/finance-family-api/finance-family-api.env (600 perms)
+Firebase JSON:            /etc/finance-family-api/firebase-service-account.json (600 perms)
+Log Directory:            /var/log/finance-family-api
+Nginx Config:             /etc/nginx/sites-available/service.nrdonline.site
+
+FILES IN THIS DEPLOYMENT PACKAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+00-prepare-local.sh
+  Purpose:     Prepare backend for deployment on local machine
+  When:        Run FIRST on local machine
+  Command:     bash 00-prepare-local.sh
+  Output:      Creates finance-family-backend.tar.gz
+  
+01-deploy.sh
+  Purpose:     Main deployment script for VPS
+  When:        Run SECOND on VPS (as root)
+  Command:     sudo bash 01-deploy.sh /tmp/finance-family-backend.tar.gz
+  Does:        Creates dirs, deploys app, creates systemd service, sets permissions
+  
+02-test-deployment.sh
+  Purpose:     Test deployment with HTTP requests
+  When:        Run AFTER service is running
+  Command:     bash 02-test-deployment.sh https://service.nrdonline.site
+  Tests:       Health, auth, security validation, injection attempts
+  
+03-verify-firebase.sh
+  Purpose:     Verify Firebase credentials are properly configured
+  When:        Run on VPS after credentials are in place
+  Command:     sudo bash 03-verify-firebase.sh
+  Checks:      File existence, permissions, JSON validity, project ID
+  
+04-operations.sh
+  Purpose:     Daily operations and maintenance
+  When:        Use for ongoing management
+  Command:     bash 04-operations.sh <command>
+  Commands:    status, logs, restart, stop, start, health, backup, restore, etc.
+
+finance-family-api.env.example
+  Purpose:     Template for production environment variables
+  Destination: /etc/finance-family-api/finance-family-api.env
+  Permissions: 600 (owner only)
+  Contents:    NODE_ENV, PORT, Firebase config, CORS origins, LLM config (empty)
+  
+finance-family-api.service
+  Purpose:     systemd service file
+  Destination: /etc/systemd/system/finance-family-api.service
+  Permissions: 644
+  Does:        Defines how systemd starts/restarts the Node.js backend
+  
+service.nrdonline.site.nginx
+  Purpose:     Nginx virtual host configuration
+  Destination: /etc/nginx/sites-available/service.nrdonline.site
+  Also:        Symlink to /etc/nginx/sites-enabled/service.nrdonline.site
+  Does:        Reverse proxy from HTTPS → internal 8030 port
+  
+README.md
+  Purpose:     Complete deployment guide with all steps
+  Read:        Before starting deployment
+  Contains:    Prerequisites, phases, troubleshooting, monitoring
+  
+FIREBASE_SETUP.md
+  Purpose:     Firebase credentials handling and security
+  Read:        Before copying Firebase JSON
+  Contains:    How to obtain JSON, secure transfer, verification, rotation
+  
+INDEX.txt (this file)
+  Purpose:     Overview of deployment package and file structure
+
+DEPLOYMENT FLOW (STEP-BY-STEP)
+═══════════════════════════════════════════════════════════════════════════════
+
+PHASE 1: PREPARE FIREBASE CREDENTIALS
+─────────────────────────────────────
+1. Go to Firebase Console → finance-family-tp
+2. Settings → Service Accounts → Generate New Private Key
+3. Save as firebase-service-account.json
+4. Read FIREBASE_SETUP.md for security requirements
+5. Keep file in safe location locally (NOT in git)
+
+PHASE 2: PREPARE LOCAL MACHINE
+──────────────────────────────
+1. cd /Users/yosbanytejas/Documents/finance-family
+2. bash deployment/00-prepare-local.sh
+3. Verify: ls -lh deployment/finance-family-backend.tar.gz
+4. Should be ~25M
+
+PHASE 3: UPLOAD TO VPS
+──────────────────────
+1. scp deployment/finance-family-backend.tar.gz root@179.43.124.107:/tmp/
+2. scp deployment/01-deploy.sh root@179.43.124.107:/tmp/
+3. scp deployment/service.nrdonline.site.nginx root@179.43.124.107:/tmp/
+4. scp deployment/03-verify-firebase.sh root@179.43.124.107:/tmp/
+5. scp deployment/04-operations.sh root@179.43.124.107:/tmp/
+6. scp /path/to/firebase-service-account.json root@179.43.124.107:/tmp/
+
+PHASE 4: DEPLOY ON VPS
+──────────────────────
+1. ssh root@179.43.124.107
+2. sudo bash /tmp/01-deploy.sh /tmp/finance-family-backend.tar.gz
+3. Wait for completion (creates user, directories, service)
+4. sudo cp /tmp/firebase-service-account.json /etc/finance-family-api/
+5. sudo chown root:root /etc/finance-family-api/firebase-service-account.json
+6. sudo chmod 600 /etc/finance-family-api/firebase-service-account.json
+
+PHASE 5: VERIFY FIREBASE
+────────────────────────
+1. sudo bash /tmp/03-verify-firebase.sh
+2. Should show:
+   - Credentials file exists
+   - Valid JSON
+   - Project ID: finance-family-tp
+   - Type: service_account
+
+PHASE 6: START SERVICE
+──────────────────────
+1. sudo systemctl enable finance-family-api
+2. sudo systemctl start finance-family-api
+3. sudo systemctl status finance-family-api
+4. curl http://127.0.0.1:8030/health
+5. Should return HTTP 200
+
+PHASE 7: CONFIGURE NGINX
+────────────────────────
+1. sudo cp /tmp/service.nrdonline.site.nginx \
+   /etc/nginx/sites-available/service.nrdonline.site
+2. sudo ln -sf /etc/nginx/sites-available/service.nrdonline.site \
+   /etc/nginx/sites-enabled/
+3. sudo nginx -t
+4. If valid: sudo systemctl reload nginx
+
+PHASE 8: TEST HTTPS
+───────────────────
+1. curl https://service.nrdonline.site/health
+2. Should return HTTP 200
+3. If cert not found, run certbot:
+   sudo certbot certonly --webroot -w /var/www/letsencrypt \
+   -d service.nrdonline.site
+
+PHASE 9: RUN TEST SUITE
+───────────────────────
+1. From local machine:
+   bash deployment/02-test-deployment.sh https://service.nrdonline.site
+2. All tests should pass ✅
+
+PHASE 10: END-TO-END TEST
+─────────────────────────
+1. Frontend: https://yosbany.github.io
+2. Login with Firebase
+3. Get ID token
+4. Call API:
+   curl -X POST https://service.nrdonline.site/api/tools/search-transactions \
+   -H "Authorization: Bearer <ID_TOKEN>" \
+   -H "Content-Type: application/json" \
+   -d '{"limit": 10}'
+5. Should return transactions (if any) or empty array
+
+CRITICAL SECURITY CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+□ Firebase JSON never committed to git
+□ Firebase JSON file permissions: 600 (rw-------)
+□ Firebase JSON owner: root:root
+□ Configuration file permissions: 600
+□ ALLOWED_ORIGINS set to HTTPS origin only
+□ No secrets in logs (verify with: sudo journalctl -u finance-family-api | grep -i key)
+□ No API keys in environment variables
+□ LLM configuration disabled (empty) for FASE 04C
+□ Service runs as non-root user: finance-api
+□ HTTPS enforced (HTTP redirects)
+□ HSTS header enabled
+□ Nginx proxy passes Authorization header
+□ Port 8030 only accessible internally (not exposed)
+
+MONITORING COMMANDS
+═══════════════════════════════════════════════════════════════════════════════
+Status:          bash deployment/04-operations.sh status
+Logs (follow):   bash deployment/04-operations.sh logs
+Logs (last N):   bash deployment/04-operations.sh logs-last 100
+Restart:         bash deployment/04-operations.sh restart
+Config:          bash deployment/04-operations.sh config
+Ports:           bash deployment/04-operations.sh ports
+Health:          bash deployment/04-operations.sh health
+Backup:          bash deployment/04-operations.sh backup
+
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════════
+Service won't start:
+  1. Check logs: sudo journalctl -u finance-family-api -n 100
+  2. Check Firebase credentials: sudo jq . /etc/finance-family-api/firebase-service-account.json
+  3. Verify environment file: cat /etc/finance-family-api/finance-family-api.env
+
+Health check returns 500:
+  1. Check Firebase connection: sudo journalctl -u finance-family-api | grep -i firebase
+  2. Verify port 8030: sudo netstat -tlnp | grep 8030
+  3. Check service user permissions: ls -la /opt/finance-family-api
+
+Nginx 502 Bad Gateway:
+  1. Verify backend running: sudo systemctl status finance-family-api
+  2. Check port 8030 listening: sudo netstat -tlnp | grep 8030
+  3. Test local endpoint: curl http://127.0.0.1:8030/health
+  4. Check Nginx error log: sudo tail -f /var/log/nginx/error.log
+
+PHASE 04C SUCCESS CRITERIA
+═══════════════════════════════════════════════════════════════════════════════
+✅ https://service.nrdonline.site/health → HTTP 200
+✅ POST /api/tools/search-transactions without token → HTTP 401
+✅ POST /api/tools/search-transactions with invalid token → HTTP 401
+✅ Security tests pass (UID/path injection rejected)
+✅ Service auto-restarts on failure
+✅ Logs contain no secrets
+✅ Firebase Realtime Database accessible via verified token
+✅ End-to-end: React → Firebase Login → Bearer Token → API → Database
+
+NEXT STEPS (NOT IN FASE 04C)
+═══════════════════════════════════════════════════════════════════════════════
+After FASE 04C is complete:
+- Do NOT start FASE 05 yet
+- Do NOT connect LLM
+- Do NOT implement Agent Orchestrator
+- Service is production-ready for current functionality
+- Backend can handle authenticated requests
+- Firebase integration complete
+
+FILES CREATED
+═══════════════════════════════════════════════════════════════════════════════
+deployment/00-prepare-local.sh          (local preparation)
+deployment/01-deploy.sh                 (VPS deployment)
+deployment/02-test-deployment.sh        (test suite)
+deployment/03-verify-firebase.sh        (Firebase verification)
+deployment/04-operations.sh             (operations/maintenance)
+deployment/finance-family-api.env.example   (config template)
+deployment/finance-family-api.service   (systemd unit)
+deployment/service.nrdonline.site.nginx (Nginx vhost)
+deployment/README.md                    (complete guide)
+deployment/FIREBASE_SETUP.md            (Firebase security guide)
+deployment/INDEX.txt                    (this file)
+
+ARCHIVE CREATED
+═══════════════════════════════════════════════════════════════════════════════
+deployment/finance-family-backend.tar.gz
+  Size: ~25M
+  Contents: dist/, node_modules/, package.json, package-lock.json
+  Created: 2024-10-02 15:13 local time
+  MD5: (run: md5sum deployment/finance-family-backend.tar.gz)
+
+GIT STATUS
+═══════════════════════════════════════════════════════════════════════════════
+Untracked:
+  - deployment/ (all files, safe to commit)
+  - deployment/finance-family-backend.tar.gz (25M, optional to commit)
+
+Modified (existing):
+  - .env.example
+  - src/services/agentApi.service.ts
+
+Commits ahead: 6 (not yet pushed)
+
+READY TO DEPLOY
+═══════════════════════════════════════════════════════════════════════════════
+✅ Backend compiled and archived
+✅ Deployment scripts ready
+✅ Configuration templates ready
+✅ Nginx configuration ready
+✅ systemd service file ready
+✅ Documentation complete
+✅ Troubleshooting guide available
+✅ Operations scripts ready
+
+AWAITING:
+⏳ Firebase service account JSON (you have it locally)
+⏳ Execution of deployment scripts on VPS
+⏳ Verification of installation
+
+═══════════════════════════════════════════════════════════════════════════════
+For detailed instructions, read: README.md
+For Firebase security, read: FIREBASE_SETUP.md
+For specific commands, see: 04-operations.sh
+
+Ready for PHASE 04C execution on VPS!
+═══════════════════════════════════════════════════════════════════════════════

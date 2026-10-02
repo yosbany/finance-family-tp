@@ -1,0 +1,38 @@
+[Unit]
+Description=Finance Family REST API Backend
+Documentation=https://github.com/yosbany/finance-family-tp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=finance-api
+Group=finance-api
+WorkingDirectory=/opt/finance-family-api
+
+# Load environment from secure config file
+EnvironmentFile=/etc/finance-family-api/finance-family-api.env
+
+# Main process
+ExecStart=/usr/bin/node /opt/finance-family-api/dist/server.js
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/finance-family-api
+
+# Process management
+Restart=on-failure
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=3
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=finance-api
+
+[Install]
+WantedBy=multi-user.target

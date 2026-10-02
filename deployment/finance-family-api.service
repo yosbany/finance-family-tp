@@ -1,0 +1,41 @@
+[Unit]
+Description=Finance Family REST API Backend
+Documentation=https://github.com/yosbany/finance-family
+After=network.target
+
+[Service]
+Type=simple
+User=finance-api
+Group=finance-api
+
+# Working directory
+WorkingDirectory=/opt/finance-family-api
+
+# Start command
+ExecStart=/usr/bin/node dist/server.js
+
+# Environment file with sensitive configuration
+EnvironmentFile=/etc/finance-family-api/finance-family-api.env
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Process management
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=finance-family-api
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Graceful shutdown
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target
