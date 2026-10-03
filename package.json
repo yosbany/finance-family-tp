@@ -10,7 +10,9 @@
     "lint": "eslint apps/frontend/src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "cd apps/frontend && vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d apps/frontend/dist"
+    "deploy": "gh-pages -d apps/frontend/dist",
+    "phase07c2:export": "node scripts/export-transactions-real.js",
+    "phase07c2:test": "npx tsx scripts/run-phase07c2-pipeline.ts"
   },
   "dependencies": {
     "date-fns": "^3.3.1",

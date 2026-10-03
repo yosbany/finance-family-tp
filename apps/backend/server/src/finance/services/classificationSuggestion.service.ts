@@ -195,11 +195,12 @@ async function suggestFromHistoricalConsensus(
  * Pipeline principal de sugerencias
  * 
  * Ejecuta secuencialmente:
- * 1. Exact match
- * 2. Consensus
- * 3. Si nada coincide, retorna 'none'
+ * 1. RULES - motor existente (threshold 0.5)
+ * 2. HISTORICAL EXACT - merchant normalizado, 100% coincidencia
+ * 3. HISTORICAL CONSENSUS - mayoría de apariciones
+ * 4. NONE - sin sugerencia confiable
  * 
- * (RULES y AGENT se implementan en el llamador, fuera del servicio)
+ * NOTA: AGENT será agregado después del piloto con histórico
  */
 async function suggestFromHistory(
   transaction: any,
