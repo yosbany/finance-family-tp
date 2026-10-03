@@ -1,0 +1,77 @@
+---
+description: Documentation files must be organized in /docs folder, except README.md which stays at root
+alwaysApply: true
+---
+
+# Documentación y Estructura de Carpetas
+
+## Regla Principal
+
+Toda documentación que sirva como contexto para el proyecto **debe ir en la carpeta `/docs`**, con la **única excepción** de `README.md` que permanece en la raíz del proyecto.
+
+## Estructura de Carpetas
+
+```
+finance-family/
+├── README.md                    # Descripción general del proyecto (raíz)
+├── docs/                        # Toda documentación de contexto
+│   ├── ARCHITECTURE.md          # Diseño y arquitectura del proyecto
+│   ├── SETUP.md                 # Guía de configuración
+│   ├── API.md                   # Documentación de APIs
+│   ├── DATABASE.md              # Esquema y configuración de BD
+│   ├── DEPLOYMENT.md            # Guía de despliegue
+│   └── WORKFLOWS.md             # Flujos de trabajo y procesos
+├── apps/
+├── config/
+└── ...
+```
+
+## Qué Va en `/docs`
+
+✅ **Incluir en `/docs`:**
+- Documentación arquitectónica
+- Guías de configuración
+- Especificaciones de APIs
+- Documentación de bases de datos
+- Procedimientos de despliegue
+- Flujos de trabajo
+- Guías de desarrollo
+- Especificaciones técnicas
+- Decisiones arquitectónicas (ADRs)
+- Notas de contexto del proyecto
+
+## Qué NO Va en `/docs`
+
+❌ **Mantener en raíz:**
+- `README.md` - Descripción general y punto de entrada
+
+❌ **No incluir en documentación:**
+- Archivos de configuración (`.env`, `.gitignore`)
+- Código fuente
+- Archivos de prueba
+
+## Cuándo Crear Nueva Documentación
+
+1. **Pregunta**: "¿Es esta documentación necesaria para entender el contexto del proyecto?"
+2. **Respuesta Sí**: Crear archivo en `/docs/`
+3. **Respuesta No**: No es necesario crear documentación
+
+## Ejemplo de Flujo
+
+**Escenario**: Necesitas documentar un nuevo endpoint de API.
+
+```
+✅ CORRECTO:
+docs/API.md - Agregar sección con el nuevo endpoint
+
+❌ INCORRECTO:
+root/API.md - No crear en raíz
+src/api.md - No mezclar con código
+```
+
+## Beneficios
+
+- 📚 Documentación centralizada y organizada
+- 🎯 Fácil de encontrar y mantener
+- 📖 Clear context para los agentes de IA
+- 🔍 Mejor navegación del proyecto

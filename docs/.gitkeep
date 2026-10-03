@@ -1,0 +1,14 @@
+# Documentación del Proyecto
+
+Esta carpeta contiene toda la documentación de contexto del proyecto finance-family.
+
+## Guía Rápida
+
+- `ARCHITECTURE.md` - Diseño del proyecto
+- `SETUP.md` - Configuración inicial
+- `API.md` - Documentación de APIs
+- `DATABASE.md` - Base de datos
+- `DEPLOYMENT.md` - Despliegue
+- `WORKFLOWS.md` - Flujos de trabajo
+
+**Nota**: El `README.md` permanece en la raíz del proyecto como punto de entrada.
