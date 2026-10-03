@@ -1,0 +1,245 @@
+================================================================================
+FASE 05B — EJECUCIÓN Y VERIFICACIÓN EN VPS
+================================================================================
+
+FECHA: 3 de Octubre, 2026 - 11:55 UTC-3
+STATUS: ⚠️ PARCIALMENTE COMPLETADO - REQUERIDA INTERVENCIÓN DEL USUARIO
+
+================================================================================
+✅ VERIFICADO Y FUNCIONAL
+================================================================================
+
+1. CONECTIVIDAD BÁSICA
+   ✅ service.nrdonline.site resolviendo → 179.43.124.107
+   ✅ Ping exitoso (3/3 packets, 26.9ms avg)
+   ✅ HTTPS /health endpoint HTTP 200
+   ✅ Nginx activo (1.18.0 Ubuntu)
+
+2. COMPONENTES LOCALES COMPILADOS
+   ✅ LLMClient compilado y cargable
+   ✅ AgentOrchestrator compilado
+   ✅ ToolRegistry con searchTransactions
+   ✅ Security: uid RECHAZADO (critical protection)
+
+3. BUILD BACKEND
+   ✅ TypeScript compila sin errores
+   ✅ dist/ completamente generado
+   ✅ package-lock.json presente
+   ✅ Listo para: npm ci --omit=dev
+
+4. SEGURIDAD VERIFICADA
+   ✅ uid parameter RECHAZADO en validation
+   ✅ Unknown parameters RECHAZADOS
+   ✅ Tool registry: solo searchTransactions permitida
+   ✅ No secrets en compilación
+
+================================================================================
+❌ BLOQUEADORES CRÍTICOS
+================================================================================
+
+PROBLEMA 1: SSH TIMEOUT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Síntoma: ssh: connect to host service.nrdonline.site port 22: Operation timed out
+Impacto: No puedo acceder al servidor para deployment
+Solución: Restaurar SSH o usar panel VPS web
+
+PROBLEMA 2: NRD_LLM_API_KEY NO DISPONIBLE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Síntoma: Sin clave, no puedo verificar modelo LLM real
+Impacto: No puedo completar PASO 2 (Detectar Modelo Real)
+Solución: Proporcionar clave manualmente
+
+================================================================================
+ACCIONES REQUERIDAS (INMEDIATO)
+================================================================================
+
+OPCIÓN A: RESTAURAR SSH (RECOMENDADO)
+────────────────────────────────────────────────────────────────────────────────
+1. Verifica conectividad:
+   $ nslookup service.nrdonline.site
+   (debe mostrar 179.43.124.107)
+
+2. Si tienes acceso panel VPS web:
+   $ sudo systemctl status ssh
+   $ sudo systemctl restart ssh
+
+3. Una vez SSH funciona:
+   $ ssh -i ~/.ssh/id_ed25519 root@service.nrdonline.site
+   $ source /etc/finance-family-api/finance-family-api.env
+   $ test -n "$NRD_LLM_API_KEY" && echo "EXISTS" || echo "MISSING"
+
+4. Luego ejecuta deployment automático:
+   $ cd /Users/yosbanytejas/Documents/finance-family
+   $ export NRD_LLM_API_KEY="<tu-clave>"
+   $ ./FASE_05B_DEPLOY.sh
+
+
+OPCIÓN B: PROPORCIONAR API KEY MANUALMENTE
+────────────────────────────────────────────────────────────────────────────────
+1. Si tienes la clave:
+   $ export NRD_LLM_API_KEY="sk-..."
+   $ cd /Users/yosbanytejas/Documents/finance-family/apps/backend/server
+   $ node verify-llm-api.mjs
+
+2. Esto verificará:
+   ✓ /v1/models accesible
+   ✓ Modelo real disponible (cuál usar)
+   ✓ /v1/chat/completions funciona
+   ✓ Tool calling soportado
+
+
+OPCIÓN C: DEPLOY MANUAL (SI PANEL VPS WEB DISPONIBLE)
+────────────────────────────────────────────────────────────────────────────────
+1. Subir dist/ a /opt/finance-family-api/
+2. Ejecutar en terminal VPS:
+   $ cd /opt/finance-family-api
+   $ npm ci --omit=dev
+   $ systemctl restart finance-family-api
+3. Verificar:
+   $ curl https://service.nrdonline.site/health
+
+================================================================================
+PASOS COMPLETADOS vs. PENDIENTES
+================================================================================
+
+PASO 1: Verificar NRD_LLM_API_KEY en VPS
+├─ Status: ⏳ PENDIENTE (SSH timeout)
+└─ Siguiente: Restaurar SSH
+
+PASO 2: Detectar Modelo Real
+├─ Status: ❌ BLOQUEADO (API key requerida)
+└─ Siguiente: Proporcionar NRD_LLM_API_KEY
+
+PASO 3: Verificar Compatibilidad LLM
+├─ Status: ❌ BLOQUEADO (API key requerida)
+└─ Siguiente: Ejecutar verify-llm-api.mjs
+
+PASO 4: Deploy a VPS
+├─ Status: ❌ BLOQUEADO (SSH timeout)
+└─ Siguiente: Restaurar SSH o usar panel web
+
+PASO 5: Restart y Health Checks
+├─ Status: ❌ BLOQUEADO (Deploy no completado)
+└─ Siguiente: Completar PASO 4
+
+PASO 6: Tests del Agente
+├─ Status: ❌ BLOQUEADO (Endpoint no existe)
+└─ Siguiente: Completar PASO 5
+
+PASO 7: Revisar Logs
+├─ Status: ❌ BLOQUEADO (SSH timeout)
+└─ Siguiente: Restaurar SSH
+
+================================================================================
+COMPONENTES VERIFICADOS LOCALMENTE (SIN DEPLOY)
+================================================================================
+
+Backend estado: ✅ COMPILADO Y VERIFICADO
+├─ TypeScript: ✅ Compila sin errores
+├─ dist/: ✅ 15 directorios + archivos .js/.map
+├─ package.json: ✅ Presente
+├─ Security validation: ✅ uid RECHAZADO
+└─ Tool Registry: ✅ searchTransactions SOLO
+
+Arquitectura: ✅ VERIFICADA
+├─ LLMClient → ✅ Compilado (https://model.nrdonline.site/v1)
+├─ AgentOrchestrator → ✅ Compilado
+├─ ToolRegistry → ✅ searchTransactions registrada
+├─ searchTransactions validation → ✅ Rechaza uid
+└─ Firebase integration → 📍 Ready para deploy
+
+================================================================================
+LO QUE SÍ VERIFICUÉ
+================================================================================
+
+✅ Backend compila sin errores
+✅ Componentes LLM/Agent compilados
+✅ Security validations funcionan (uid rejection OK)
+✅ VPS accesible por red (ping OK)
+✅ HTTPS health endpoint HTTP 200
+✅ Nginx servidor web corriendo
+✅ Certificado SSL válido
+✅ Latencia red aceptable (26ms avg)
+✅ CORS habilitado en VPS
+
+================================================================================
+LO QUE NO PUEDO VERIFICAR (SIN SSH/API KEY)
+================================================================================
+
+❌ NRD_LLM_API_KEY está configurado en VPS
+❌ Cuál es el modelo LLM real disponible
+❌ /v1/chat/completions funciona
+❌ Tool calling es soportado
+❌ dist/ fue copiado a VPS
+❌ npm ci --omit=dev se ejecutó
+❌ Service restart fue exitoso
+❌ POST /api/agent/query endpoint existe
+
+================================================================================
+PRÓXIMOS PASOS (SECUENCIA)
+================================================================================
+
+1. INMEDIATO: Restaurar SSH O proporcionar API key
+   └─> Sin esto, no puedo continuar
+
+2. LUEGO: Ejecutar verify-llm-api.mjs
+   └─> Confirmar modelo real y compatibilidad
+
+3. LUEGO: Ejecutar FASE_05B_DEPLOY.sh
+   └─> Deploy automático a VPS
+
+4. LUEGO: Obtener Firebase ID Token
+   $ node get-id-token.mjs
+
+5. LUEGO: Ejecutar tests del agente (PASO 6)
+   ├─ Sin tool
+   ├─ Con tool
+   ├─ Filtros
+   └─ Security tests
+
+6. FINALMENTE: Generar reporte final
+   └─> FASE COMPLETA
+
+================================================================================
+DOCUMENTACIÓN DISPONIBLE
+================================================================================
+
+📄 FASE_05B_REPORTE_VERIFICACION.md (DETALLADO)
+   └─> /Users/yosbanytejas/Documents/finance-family/FASE_05B_REPORTE_VERIFICACION.md
+
+📄 FASE_05B_EJECUCION_RESUMEN.txt (ESTE ARCHIVO)
+   └─> Resumen ejecutivo
+
+📄 FASE_05B_DEPLOY.sh (DEPLOYMENT AUTOMÁTICO)
+   └─> Script que automatiza TODO el proceso
+
+📄 FASE_05B_STATUS.md (ESTADO DEL PROYECTO)
+   └─> Documentación de componentes implementados
+
+================================================================================
+CONTACTO / SOPORTE
+================================================================================
+
+Si SSH sigue fallando:
+1. Verifica firewall VPS (puerto 22)
+2. Verifica SSH service en consola VPS
+3. Verifica authorized_keys contiene tu clave pública
+
+Si necesitas API key:
+1. Revisa /etc/finance-family-api/finance-family-api.env en VPS
+2. O proporciona manualmente
+
+Para cualquier duda:
+- Revisar logs con: journalctl -u finance-family-api -n 100
+- Revisar nginx: sudo nginx -t
+- Revisar conectividad: curl -v https://service.nrdonline.site/health
+
+================================================================================
+VERSIÓN Y METADATA
+================================================================================
+
+Generado por: Cursor Agent (FASE 05B Subagent)
+Repositorio: /Users/yosbanytejas/Documents/finance-family
+Timestamp: 2026-10-03T11:55:00-03:00
+Versión: FASE_05B_EJECUCION_RESUMEN v1.0
+Status: AWAITING SSH OR API KEY
