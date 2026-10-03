@@ -13,6 +13,7 @@ import { AccountsManagement } from './components/accounts/AccountsManagement';
 import { CategoriesManagement } from './components/categories/CategoriesManagement';
 import { MembersManagement } from './components/members/MembersManagement';
 import { SettingsPage } from './components/settings/SettingsPage';
+import { AgentQueryDev } from './components/agent/AgentQueryDev';
 import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
@@ -138,6 +139,14 @@ function App() {
               <Layout>
                 <SettingsPage />
               </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dev/agent"
+          element={
+            <ProtectedRoute>
+              <AgentQueryDev />
             </ProtectedRoute>
           }
         />

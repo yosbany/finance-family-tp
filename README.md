@@ -1,307 +1,112 @@
-# 💰 Finance Family - Gestión de Finanzas Familiares
+# 💰 Finance Family - Estructura del Proyecto
 
-Aplicación web para gestionar las finanzas familiares de Yosba y Yane, con soporte para múltiples cuentas bancarias, tarjetas de crédito/débito, análisis financiero y gestión de patrimonio.
-
-## 🚀 Características
-
-### ✅ Implementadas
-
-- **Autenticación con Google**: Login seguro mediante Firebase Authentication
-- **Dashboard Financiero**: KPIs en tiempo real (balance, ingresos, gastos, ahorro, deuda)
-- **Gestión de Cuentas**: 15 cuentas predefinidas (BROU, Itaú, Santander, OCA, Prex, BHU, IBM)
-- **Carga de Extractos**:
-  - Soporte para PDF, CSV y Excel
-  - **🧠 Parsers Inteligentes**: Detección automática de formato por banco uruguayo
-  - Parsers específicos para BROU, Itaú, Santander, OCA, Prex y BHU
-  - Procesamiento en memoria (sin almacenar archivos)
-  - Detección de duplicados por hash SHA-256
-  - Auto-categorización inteligente
-  - Ver [BANK_PARSERS.md](./BANK_PARSERS.md) para detalles de formatos
-- **Gestión de Transacciones**:
-  - Lista completa con filtros avanzados
-  - Edición y clasificación manual
-  - Búsqueda por descripción, cuenta, categoría, fecha
-- **Análisis Financiero**:
-  - Gráficos de tendencia mensual (ingresos, gastos, ahorro)
-  - Distribución de gastos por categoría (pie chart)
-  - Distribución de ingresos por categoría (bar chart)
-  - Filtros por período (3m, 6m, 12m, todo) y moneda (UYU, USD)
-- **Gestión de Patrimonio**:
-  - Registro de activos (propiedades, vehículos, inversiones)
-  - Valoración en UYU y USD
-  - Tracking de fecha de adquisición
-- **Objetivos Financieros**:
-  - Creación de metas con montos y fechas límite
-  - Barra de progreso visual
-  - Actualización de avances
-  - Estados: activo, completado, cancelado
-- **Multi-moneda**: Soporte completo para UYU y USD
-- **Multi-usuario**: Datos aislados por usuario (Firebase UID)
-- **Diseño Responsive**: Optimizado para desktop y móvil
-- **Dark Mode**: Tema oscuro automático
-
-### 📋 Pendientes
-
-- Exportación de reportes (PDF, Excel)
-- Notificaciones de objetivos próximos a vencer
-- Comparación de períodos (mes actual vs anterior)
-- Mejoras en parsers PDF para OCA
-- Tests unitarios para parsers de bancos
-
-## 🏗️ Arquitectura
-
-### Stack Tecnológico
-
-- **Frontend**: React 18 + TypeScript + Vite
-- **Estilos**: Tailwind CSS
-- **Gráficos**: Recharts
-- **Backend**: Firebase (Authentication + Realtime Database)
-- **Deployment**: GitHub Pages
-- **CI/CD**: GitHub Actions
-
-### Estructura del Proyecto
+## 📁 Estructura General
 
 ```
-src/
-├── components/
-│   ├── auth/              # LoginPage, ProtectedRoute
-│   ├── common/            # LoadingSpinner, KPICard
-│   ├── dashboard/         # Dashboard principal
-│   ├── layout/            # Header, Sidebar, Layout
-│   ├── transactions/      # UploadStatements, TransactionList
-│   ├── reports/           # FinancialAnalysis
-│   ├── assets/            # AssetManagement
-│   └── goals/             # GoalsManagement
-├── hooks/                 # useAuth
-├── parsers/               # csvParser, excelParser, pdfParser, fileHasher
-├── services/              # Firebase services (auth, accounts, categories, transactions, assets, goals, uploadHistory)
-├── types/                 # TypeScript interfaces
-└── utils/                 # categorization, calculations
+finance-family/
+├── apps/                    # Código fuente
+│   ├── frontend/           # 🎨 Aplicación React
+│   └── backend/            # 🔧 Servidores y funciones
+├── docs/                   # 📚 Documentación completa
+├── config/                 # ⚙️ Configuración y deployment
+├── scripts/                # 🧪 Scripts de test y validación
+├── node_modules/           # 📦 Dependencias (no tocar)
+└── package.json            # 📋 Configuración del proyecto
 ```
 
-## 🔧 Configuración
+## 🚀 Inicio Rápido
 
-### 1. Clonar el repositorio
-
-```bash
-git clone https://github.com/yosbany/finance-family-tp.git
-cd finance-family-tp
-```
-
-### 2. Instalar dependencias
-
-```bash
-npm install
-```
-
-### 3. Configurar Firebase
-
-Crear archivo `.env.local` con tus credenciales de Firebase:
-
-```env
-VITE_FIREBASE_API_KEY=tu_api_key
-VITE_FIREBASE_AUTH_DOMAIN=tu_auth_domain
-VITE_FIREBASE_PROJECT_ID=tu_project_id
-VITE_FIREBASE_STORAGE_BUCKET=tu_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=tu_messaging_sender_id
-VITE_FIREBASE_APP_ID=tu_app_id
-VITE_FIREBASE_DATABASE_URL=tu_database_url
-```
-
-### 4. Configurar Firebase Realtime Database
-
-Aplicar las reglas de seguridad desde `firebase-rules.json`:
-
-```json
-{
-  "rules": {
-    "accounts": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "transactions": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "categories": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "assets": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "goals": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    },
-    "uploadHistory": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
-      }
-    }
-  }
-}
-```
-
-### 5. Ejecutar en desarrollo
-
+### Desarrollo del Frontend
 ```bash
 npm run dev
 ```
 
-La aplicación estará disponible en `http://localhost:5173`
-
-### 6. Build para producción
-
+### Compilación
 ```bash
 npm run build
 ```
 
-## 🚀 Deployment en GitHub Pages
+### Validación de código
+```bash
+npm run lint
+```
 
-### Configuración Inicial
+## 📂 Descripción de Carpetas
 
-1. **Habilitar GitHub Pages**:
-   - Ve a Settings > Pages
-   - Source: GitHub Actions
+### `/apps/frontend` 🎨
+Aplicación React con:
+- `src/` - Código fuente React
+- `public/` - Recursos estáticos
+- `index.html` - Punto de entrada HTML
+- `vite.config.ts` - Configuración de Vite
 
-2. **Configurar Secrets**:
-   - Ve a Settings > Secrets and variables > Actions
-   - Agrega los siguientes secrets:
-     - `VITE_FIREBASE_API_KEY`
-     - `VITE_FIREBASE_AUTH_DOMAIN`
-     - `VITE_FIREBASE_PROJECT_ID`
-     - `VITE_FIREBASE_STORAGE_BUCKET`
-     - `VITE_FIREBASE_MESSAGING_SENDER_ID`
-     - `VITE_FIREBASE_APP_ID`
-     - `VITE_FIREBASE_DATABASE_URL`
+### `/apps/backend` 🔧
+Servidores y funciones:
+- `server/` - Servidor Node.js/Express
+- `functions/` - Firebase Cloud Functions
 
-3. **Push a main**:
-   ```bash
-   git add .
-   git commit -m "Deploy to GitHub Pages"
-   git push origin main
-   ```
+### `/docs` 📚
+Toda la documentación del proyecto:
+- Guías de setup
+- Planes de implementación
+- Reportes de fases
+- Guías de deployment
+- Documentación técnica
 
-El workflow de GitHub Actions se ejecutará automáticamente y desplegará la aplicación.
+### `/config` ⚙️
+Configuración y deployment:
+- `deployment/` - Configuración de despliegue
+- `firebase.json` - Configuración de Firebase
+- `firebase-rules.json` - Reglas de Firestore
 
-## 📊 Cuentas Configuradas
+### `/scripts` 🧪
+Scripts de utilidad:
+- Tests de validación
+- Scripts de verificación
+- Archivos de configuración de testing
 
-### Yosba
-- BROU Pesos / Dólares
-- Itaú Pesos / Dólares
-- Itaú Visa (crédito)
-- OCA Master 1 (crédito)
-- OCA Visa (crédito)
-- Prex Pesos / Dólares
-- IBM Inversiones
+## 🔗 Enlaces Útiles
 
-### Yane
-- Santander Pesos / Dólares
-- Santander Visa (crédito)
-- OCA Master 2 (crédito)
+### Documentación Importante
+- 📖 [README Principal](./README_ORIGINAL.md)
+- 🚀 [Quick Start](./docs/QUICKSTART.md)
+- 🔒 [Seguridad - Fase 02](./docs/FASE_02_SEGURIDAD.md)
+- 🔧 [Configuración Técnica](./docs/TECHNICAL_VALIDATION.md)
+- 📋 [Plan General](./docs/PLAN.md)
 
-### Ambos
-- BHU Conjunto
+## 🛠️ Tecnologías
 
-## 📁 Categorías Predefinidas
+**Frontend:**
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- Firebase SDK
+- Recharts (gráficos)
+- PDF.js (manejo de PDFs)
 
-### Ingresos
-- Salario
-- Freelance
-- Inversiones
-- Otros
+**Backend:**
+- Node.js
+- Firebase (Auth, Firestore, Storage)
+- Express.js
 
-### Gastos
-- Alimentación (Supermercado, Restaurantes, Delivery)
-- Transporte (Combustible, Uber/Taxi, Mantenimiento, Estacionamiento)
-- Servicios (Electricidad, Agua, Internet, Teléfono, Cable)
-- Vivienda (Alquiler/Hipoteca, Mantenimiento, Contribución, Seguros)
-- Salud (Mutualista, Farmacia, Médicos, Seguros)
-- Entretenimiento (Streaming, Cine, Eventos, Hobbies)
-- Educación (Cursos, Libros, Matrícula)
-- Compras (Ropa, Electrónica, Hogar, Otros)
-- Otros Gastos
+## 📝 Notas Importantes
 
-## 🔐 Seguridad
+1. **Paths en scripts**: Si ejecutas scripts desde la raíz, asegúrate de ajustar las rutas
+2. **Entorno**: Usa `.env.local` para variables locales y `.env.production` para producción
+3. **Git**: El directorio `.git` está en la raíz del proyecto
 
-- Autenticación mediante Google OAuth
-- Datos aislados por usuario (Firebase UID)
-- Reglas de seguridad en Firebase Realtime Database
-- Variables de entorno para credenciales sensibles
-- No se almacenan archivos (procesamiento en memoria)
+## 💡 ¿Necesitas Ayuda?
 
-## 📱 Uso de la Aplicación
-
-### 1. Login
-- Accede con tu cuenta de Google
-- Primera vez: se inicializan cuentas y categorías automáticamente
-
-### 2. Dashboard
-- Visualiza KPIs principales
-- Balance total en UYU y USD
-- Ingresos y gastos del mes
-- Tasa de ahorro
-
-### 3. Cargar Extractos
-- Ve a "Cargar Extractos"
-- Selecciona la cuenta bancaria
-- Sube archivo PDF, CSV o Excel
-- Las transacciones se categorizan automáticamente
-- Se detectan duplicados por hash
-
-### 4. Gestionar Transacciones
-- Ve a "Transacciones"
-- Filtra por cuenta, categoría, tipo, fecha
-- Edita descripciones y categorías
-- Elimina transacciones incorrectas
-
-### 5. Análisis Financiero
-- Ve a "Reportes"
-- Selecciona período y moneda
-- Visualiza gráficos de tendencia
-- Analiza distribución de gastos e ingresos
-
-### 6. Gestión de Patrimonio
-- Ve a "Patrimonio"
-- Agrega activos (casa, auto, inversiones)
-- Actualiza valores
-- Visualiza patrimonio total
-
-### 7. Objetivos Financieros
-- Ve a "Objetivos"
-- Crea metas con montos y fechas
-- Actualiza progreso
-- Visualiza barra de avance
-
-## 🤝 Contribuir
-
-Este es un proyecto personal, pero si encuentras bugs o tienes sugerencias:
-
-1. Abre un issue
-2. Describe el problema o mejora
-3. Si es posible, incluye capturas de pantalla
-
-## 📄 Licencia
-
-MIT License - Uso personal y educativo
-
-## 👨‍💻 Autor
-
-**Yosba** - Gestión de finanzas familiares para Yosba y Yane
+Consulta los archivos de documentación en `/docs` para guías específicas sobre:
+- Setup inicial de Firebase
+- Deployment en diferentes ambientes
+- Seguridad y validaciones
+- Configuración de NGINX/HTTPS
+- Estructura de datos
 
 ---
 
-**Hecho con ❤️ usando React, TypeScript, Firebase y Tailwind CSS**
+**Última actualización**: Oct 3, 2026
+**Versión**: 0.1.0

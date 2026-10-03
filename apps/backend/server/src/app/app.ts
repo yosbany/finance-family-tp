@@ -14,6 +14,7 @@ import { config } from '../config/env.js';
 import { errorHandler } from '../middleware/error.middleware.js';
 import registerHealthRoutes from '../routes/health.routes.js';
 import registerToolsRoutes from '../routes/tools.routes.js';
+import registerAgentRoutes from '../routes/agent.routes.js';
 
 export async function createApp() {
   const app = fastify({
@@ -34,6 +35,9 @@ export async function createApp() {
 
   // Tools routes (authenticated)
   await registerToolsRoutes(app);
+
+  // Agent routes (authenticated)
+  await registerAgentRoutes(app);
 
   // Global error handler
   app.setErrorHandler(

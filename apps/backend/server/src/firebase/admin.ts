@@ -12,7 +12,7 @@
  * - Admin SDK bypasses security rules, so application code is the actual security barrier
  */
 
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import { config } from '../config/env.js';
 
 let app: admin.app.App | null = null;
