@@ -14,7 +14,7 @@
  */
 
 import { AuthenticatedContext } from '../../auth/authenticatedContext.js';
-import { categorizeTransaction, CategorizationResult } from '../../../shared/categorization/engine.js';
+import { categorizeTransaction, CategorizationResult } from '../../shared/categorization/engine';
 
 /**
  * Tipos para sugerencias
@@ -101,7 +101,7 @@ function suggestFromRules(
     confidence: result.confidence,
     reason: `Clasificación por reglas con confianza ${(result.confidence * 100).toFixed(0)}%.`,
     metadata: {
-      matchedKeywords: result.matchedKeywords.map(k => k.keyword),
+      matchedKeywords: result.matchedKeywords.map((k: any) => k.keyword),
       ruleConfidence: result.confidence,
     }
   };
