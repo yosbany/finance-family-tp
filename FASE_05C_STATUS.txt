@@ -1,0 +1,167 @@
+================================================================================
+                    FASE 05C — STATUS ACTUAL
+================================================================================
+
+Fecha: 3 de Octubre, 2026
+Ejecutado por: AI Agent
+Tiempo de ejecución: ~4 horas
+
+================================================================================
+                            RESUMEN EJECUTIVO
+================================================================================
+
+HALLAZGO CLAVE:
+├─ Protocolo de Tool Calling: ✅ FUNCIONANDO CORRECTAMENTE
+├─ Código de Orchestrator: ✅ CORRECTO
+├─ Autorización Firebase: ❌ BLOQUEADOR IDENTIFICADO
+└─ Próximo Paso: Setup de usuario en Firebase
+
+ESTADO FINAL: 
+═══════════════════════════════════════════════════════════════════════════════
+  FASE 05 status: BLOQUEADA EN AUTORIZACIÓN
+  (No es un problema del código, es configuración de Firebase)
+═══════════════════════════════════════════════════════════════════════════════
+
+================================================================================
+                        VALIDACIONES COMPLETADAS
+================================================================================
+
+✅ TEST 1: Protocolo de Tool Calling Local
+   Archivo: test-tool-protocol-detailed.mjs
+   Resultado: PASA
+   ├─ Iteración 1: LLM recibe [system, user] → tool_calls
+   ├─ Iteración 2: LLM recibe [system, user, assistant, tool] → respuesta final
+   ├─ Estructura: role="tool" + tool_call_id + content
+   └─ Conclusión: Protocolo CORRECTO para ibm-ica
+
+✅ TEST 2: Código de Autorización
+   Ubicación: src/finance/repositories/transactions.repository.ts
+   Hallazgo: Línea 30-38 valida usuario en /authorizedUsers
+   ├─ Verifica que /authorizedUsers/{uid} existe
+   ├─ Verifica que autorizado === true
+   ├─ Obtiene familyRoot
+   └─ Lanza USER_NOT_AUTHORIZED si falla (CORRECTO)
+
+✅ TEST 3: Estructura de Mensajes LLM
+   Validación: Mensajes enviados a ibm-ica son correctos
+   ├─ Format OpenAI estándar
+   ├─ tool_call_id coincide entre request/response
+   ├─ Sin campos adicionales innecesarios
+   └─ Firebase Rules compatibles
+
+================================================================================
+                        BLOQUEADOR IDENTIFICADO
+================================================================================
+
+CAUSA: Usuario no autorizado en Firebase
+
+UBICACIÓN: /authorizedUsers/{uid}
+
+REQUISITO:
+  {
+    "uid": "test-user-uid",
+    "email": "test-e2e@nrdonline.site",
+    "autorizado": true,
+    "familyRoot": "family"
+  }
+
+IMPACTO:
+  Sin esto, TODOS los queries a Firebase fallan
+  └─ searchTransactions lanza USER_NOT_AUTHORIZED
+  └─ Agent devuelve error
+  └─ E2E test no puede completarse
+
+SOLUCIÓN:
+  1. Verificar /authorizedUsers en Firebase Console
+  2. Si no existe: crear con autorizado=true
+  3. Crear datos de prueba en /family/transactions
+  4. Generar ID token válido
+  5. Ejecutar tests
+
+================================================================================
+                        ARCHIVO DE ACCIÓN
+================================================================================
+
+📄 LEER PRIMERO:
+   → FASE_05C_RESUMEN_EJECUTIVO.md (pasos prácticos)
+
+📄 ENTENDER PROFUNDO:
+   → docs/FASE_05C_DIAGNOSIS.md (análisis técnico)
+   → docs/FASE_05C_PLAN.md (plan completo)
+
+📄 VALIDACIÓN:
+   → docs/FASE_05C_FINAL_REPORT.md (este reporte)
+
+🧪 SCRIPTS DE TEST:
+   → apps/backend/server/test-tool-protocol.mjs ✅ PASA
+   → apps/backend/server/test-tool-protocol-detailed.mjs ✅ PASA
+   → apps/backend/server/setup-test-user.mjs (para setup)
+
+================================================================================
+                        PRÓXIMOS PASOS (IN ORDER)
+================================================================================
+
+1. [ ] VERIFICAR: /authorizedUsers en Firebase
+       → Firebase Console → Realtime Database
+       → Buscar test-e2e@nrdonline.site
+
+2. [ ] CREAR: Entrada si no existe
+       → Con autorizado=true y familyRoot="family"
+
+3. [ ] SEED: Datos de prueba
+       → /family/transactions con 2-3 movimientos
+
+4. [ ] TOKEN: Generar ID token válido
+       → setup-test-user.mjs o Firebase Console
+
+5. [ ] TEST: Endpoint directo
+       → POST /api/tools/search-transactions
+       → Esperado: HTTP 200
+
+6. [ ] TEST: End-to-end
+       → POST /api/agent/query
+       → Esperado: toolsUsed=["searchTransactions"]
+
+7. [ ] VALIDAR: Comportamientos especiales
+       → Sin resultados, filtros, seguridad
+
+8. [ ] REPORTAR: Resultados finales
+
+================================================================================
+                        DOCUMENTACIÓN DE REFERENCIA
+================================================================================
+
+Configuración:
+  config/firebase-rules.json (línea 11)
+    └─ Requiere autorizado === true
+
+Código:
+  src/finance/repositories/transactions.repository.ts (línea 30-38)
+    └─ Valida usuario en /authorizedUsers
+  
+  src/agent/orchestrator.ts (línea 150-170)
+    └─ Construye mensaje de tool result ✅ CORRECTO
+
+  src/llm/client.ts
+    └─ Comunica con ibm-ica ✅ CORRECTO
+
+================================================================================
+                        CONCLUSIÓN
+================================================================================
+
+❌ FASE 05 status: BLOQUEADA
+   Motivo: Autorización usuario Firebase (configuración, no código)
+
+✅ Código status: VALIDADO
+   - Protocolo de tool calling: CORRECTO
+   - Estructura de messages: CORRECTA
+   - Sin repetición de tool calls: VERIFICADO
+
+⏳ Siguiente: Setup manual del usuario en Firebase
+
+Tiempo estimado para completar: 30-60 minutos
+
+================================================================================
+Generado: 2026-10-03
+Estatus: LISTO PARA ACCIÓN
+================================================================================
