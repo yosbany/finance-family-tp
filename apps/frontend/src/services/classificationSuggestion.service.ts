@@ -3,9 +3,12 @@
  * 
  * Llama a la tool backend suggestTransactionCategory para obtener sugerencias.
  * Mantiene metadata local de aceptación de sugerencias.
+ * 
+ * NOTE: agentApi integration is future work (FASE 07C3+)
+ * For now this maintains the interface but returns null.
  */
 
-import { agentApi } from './agentApi.service';
+// import { agentApi } from './agentApi.service';
 
 /**
  * Tipo para sugerencia de clasificación
@@ -38,6 +41,12 @@ export interface SuggestionMetadata {
 export async function getSuggestionForTransaction(
   transactionId: string
 ): Promise<ClassificationSuggestion | null> {
+  // NOTE: agentApi integration is future work. For now, return null.
+  // The backend tool suggestTransactionCategory exists but frontend integration
+  // requires agentApi implementation (FASE 07C3+)
+  return null;
+  
+  /*
   try {
     const result = await agentApi.callTool('suggestTransactionCategory', {
       transactionId,
@@ -47,7 +56,7 @@ export async function getSuggestionForTransaction(
       console.error(`Error getting suggestion: ${result?.error}`);
       return null;
     }
-
+    
     // Parsear resultado de la tool
     if (result.result && typeof result.result === 'object') {
       const toolOutput = result.result as any;
@@ -67,6 +76,7 @@ export async function getSuggestionForTransaction(
     console.error('Error in getSuggestionForTransaction:', error);
     return null;
   }
+  */
 }
 
 /**

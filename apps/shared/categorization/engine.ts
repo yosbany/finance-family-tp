@@ -314,6 +314,194 @@ export const categorizeTransaction = (
   };
 };
 
+/**
+ * Explica qué keywords de una categoría (o del mejor match) coinciden con la descripción.
+ */
+export const explainDescriptionMatch = (
+  description: string,
+  categories: any[],
+  preferredCategoryId?: string
+): CategorizationResult | null => {
+  const result = categorizeTransaction(description, categories);
+  if (!result) return null;
+
+  if (preferredCategoryId && preferredCategoryId !== result.categoryId) {
+    const preferred = categories.find(c => c.id === preferredCategoryId);
+    if (!preferred) return result;
+
+    const normalizedDesc = normalizeText(description);
+    const matchedKeywords: KeywordMatchInfo[] = [];
+
+    for (const keyword of preferred.keywords || []) {
+      const match = matchKeyword(normalizedDesc, keyword);
+      if (match.matches) {
+        matchedKeywords.push({
+          keyword,
+          source: 'category',
+          sourceName: preferred.name,
+          categoryId: preferred.id,
+          matchType: match.matchType,
+          score: match.score,
+        });
+      }
+    }
+
+    if (matchedKeywords.length === 0) return result;
+
+    return {
+      categoryId: preferredCategoryId,
+      confidence: result.confidence,
+      matchedKeywords: matchedKeywords.sort((a, b) => b.score - a.score),
+    };
+  }
+
+  return result;
+};
+
+/**
+ * Aprende de las clasificaciones manuales del usuario
+ * Retorna keywords sugeridas para agregar a las categorías
+ */
+export const learnFromManualClassification = (
+  transaction: any,
+  category: any
+): string[] => {
+  if (!transaction.description) return [];
+
+  const tokens = tokenize(transaction.description);
+  const bigrams = generateNGrams(tokens, 2);
+  
+  // Extraction helper for entities (inline version)
+  const normalizedDesc = normalizeText(transaction.description);
+  const codes = (normalizedDesc.match(/[a-z]{2,}\d{2,}/g) || []);
+
+  const candidates = [
+    ...tokens.filter(t => t.length >= 3),
+    ...bigrams,
+    ...codes,
+  ].filter((candidate): candidate is string => typeof candidate === 'string' && candidate.length > 0);
+
+  const allKeywords = (category.keywords ?? []).filter(
+    (keyword: any): keyword is string => typeof keyword === 'string' && keyword.length > 0
+  );
+
+  const newKeywords = candidates.filter(candidate => {
+    return !allKeywords.some((keyword: string) => {
+      const normalizedKeyword = normalizeText(keyword);
+      const normalizedCandidate = normalizeText(candidate);
+      if (!normalizedKeyword || !normalizedCandidate) return false;
+      return normalizedKeyword.includes(normalizedCandidate) ||
+             normalizedCandidate.includes(normalizedKeyword);
+    });
+  });
+
+  // Retornar los 5 mejores candidatos (más largos = más específicos)
+  return newKeywords
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 5);
+};
+
+/**
+ * Categoriza múltiples transacciones
+ */
+export const categorizeTransactions = (
+  transactions: any[],
+  categories: any[]
+): any[] => {
+  return transactions.map(transaction => {
+    if (!transaction.description) {
+      return transaction;
+    }
+
+    const result = categorizeTransaction(transaction.description, categories);
+
+    if (result && result.confidence >= 0.5) {
+      // Solo auto-categorizar si la confianza es >= 50%
+      return {
+        ...transaction,
+        category: result.categoryId,
+        status: 'classified'
+      };
+    }
+
+    return {
+      ...transaction,
+      status: 'pending' // Requiere clasificación manual
+    };
+  });
+};
+
+/**
+ * Calcula el porcentaje de transacciones categorizadas automáticamente
+ */
+export const calculateCategorizationRate = (transactions: any[]): number => {
+  if (transactions.length === 0) return 0;
+
+  const categorized = transactions.filter(t => t.status === 'classified').length;
+  return (categorized / transactions.length) * 100;
+};
+
+/**
+ * Obtiene las transacciones que requieren clasificación manual
+ */
+export const getPendingTransactions = (transactions: any[]): any[] => {
+  return transactions.filter(t => t.status === 'pending');
+};
+
+/**
+ * Calcula similitud avanzada usando Jaccard + n-gramas
+ */
+const calculateAdvancedSimilarity = (tokens1: string[], tokens2: string[]): number => {
+  // Similitud de Jaccard para tokens
+  const set1 = new Set(tokens1);
+  const set2 = new Set(tokens2);
+  const intersection = new Set([...set1].filter(x => set2.has(x)));
+  const union = new Set([...set1, ...set2]);
+  const jaccardSimilarity = intersection.size / union.size;
+
+  // Similitud de n-gramas
+  const bigrams1 = new Set(generateNGrams(tokens1, 2));
+  const bigrams2 = new Set(generateNGrams(tokens2, 2));
+  const bigramIntersection = new Set([...bigrams1].filter(x => bigrams2.has(x)));
+  const bigramUnion = new Set([...bigrams1, ...bigrams2]);
+  const bigramSimilarity = bigramUnion.size > 0 ? bigramIntersection.size / bigramUnion.size : 0;
+
+  // Promedio ponderado (60% Jaccard, 40% bigrams)
+  return jaccardSimilarity * 0.6 + bigramSimilarity * 0.4;
+};
+
+/**
+ * Sugiere categorías basándose en transacciones similares previas
+ */
+export const suggestCategory = (
+  description: string,
+  previousTransactions: any[],
+  categories: any[]
+): { categoryId: string; confidence: number } | null => {
+  const tokens = tokenize(description);
+
+  // Buscar transacciones similares que ya estén categorizadas
+  const similarTransactions = previousTransactions
+    .filter(t => t.status === 'classified' && t.category)
+    .map(t => ({
+      transaction: t,
+      similarity: calculateAdvancedSimilarity(tokens, tokenize(t.description))
+    }))
+    .filter(item => item.similarity > 0.6) // Umbral de similitud
+    .sort((a, b) => b.similarity - a.similarity);
+
+  if (similarTransactions.length === 0) {
+    return null;
+  }
+
+  // Usar la categoría de la transacción más similar
+  const mostSimilar = similarTransactions[0];
+  return {
+    categoryId: mostSimilar.transaction.category!,
+    confidence: mostSimilar.similarity
+  };
+};
+
 export default {
   normalizeText,
   tokenize,
@@ -321,4 +509,10 @@ export default {
   calculateLevenshteinSimilarity,
   matchKeyword,
   categorizeTransaction,
+  explainDescriptionMatch,
+  learnFromManualClassification,
+  categorizeTransactions,
+  calculateCategorizationRate,
+  getPendingTransactions,
+  suggestCategory,
 };
