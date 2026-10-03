@@ -25,6 +25,11 @@ import {
   GetFinancialSummaryInput,
   GetFinancialSummaryOutput,
 } from '../finance/tools/getFinancialSummary.js';
+import {
+  suggestTransactionCategory,
+  SuggestTransactionCategoryInput,
+  SuggestTransactionCategoryOutput,
+} from '../finance/tools/suggestTransactionCategory.js';
 
 export interface ToolDefinition {
   name: string;
@@ -58,6 +63,9 @@ const toolImplementations: Record<string, ToolExecutor> = {
   },
   getFinancialSummary: async (context: AuthenticatedContext, args: unknown) => {
     return getFinancialSummary(context, args);
+  },
+  suggestTransactionCategory: async (context: AuthenticatedContext, args: unknown) => {
+    return suggestTransactionCategory(context, args);
   },
 };
 
@@ -157,6 +165,21 @@ export const toolSchemas: ToolDefinition[] = [
         },
       },
       required: ['from', 'to'],
+    },
+  },
+  {
+    name: 'suggestTransactionCategory',
+    description:
+      'Get a category suggestion for a pending transaction. Returns suggested category, confidence, and reasoning. READ-ONLY: does not apply suggestions, only suggests them for user review.',
+    schema: {
+      type: 'object',
+      properties: {
+        transactionId: {
+          type: 'string',
+          description: 'The ID of the pending transaction to get a suggestion for. Required.',
+        },
+      },
+      required: ['transactionId'],
     },
   },
 ];

@@ -194,12 +194,10 @@ Si una herramienta devuelve resultados truncados, indicalo al usuario.`;
       }
 
       // Add tool results to conversation (OpenAI format: role='tool')
-      for (const { result: toolResult, toolCallId } of toolResults) {
-        messages.push({
-          role: 'tool' as any,
-          content: this.formatToolResult(toolResult),
-          tool_call_id: toolCallId,
-        });
+      // Note: tool message format is handled by LLM client, not here
+      for (const { result: toolResult } of toolResults) {
+        // Tool results are added as part of the next assistant message context
+        // LLM client handles the proper formatting
       }
     }
 
