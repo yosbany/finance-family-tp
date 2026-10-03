@@ -40,8 +40,8 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-// Import shared engine from copied location
-import { categorizeTransaction } from './src/shared/categorization/engine.js';
+// Import shared engine (unified)
+import { categorizeTransaction } from '../apps/shared/categorization/engine.js';
 
 function normalizeMerchant(description: string): string {
   if (!description) return '';
@@ -313,12 +313,8 @@ async function main() {
       llm_pilot: {
         agentCandidatesTotal: agentCandidates.length,
         willProcess: Math.min(10, agentCandidates.length),
-        candidates: agentCandidates.slice(0, 10).map(tx => ({
-          transactionId: tx.id,
-          description: tx.description,
-          merchant: tx.merchant,
-          amount: tx.amount
-        }))
+        // Candidate details kept in memory only (not persisted)
+        candidatesProcessed: Math.min(10, agentCandidates.length)
       },
 
       verification: {
@@ -334,12 +330,22 @@ async function main() {
     console.log('✅ PHASE 07C2 MEASUREMENT COMPLETE');
     console.log('='.repeat(70) + '\n');
 
-    // Save report
+    // Save report (metrics only, no raw financial data)
     const reportDir = path.join(__dirname, '../docs');
     fs.mkdirSync(reportDir, { recursive: true });
     const reportPath = path.join(reportDir, 'FASE_07C2_RESULTADOS_REALES.json');
-    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-    console.log(`📁 Report saved to: docs/FASE_07C2_RESULTADOS_REALES.json\n`);
+    
+    // Strip sensitive transaction details before persistence
+    const persistedReport = {
+      ...report,
+      llm_pilot: {
+        ...report.llm_pilot,
+        // Only counts, no transaction details
+      }
+    };
+    
+    fs.writeFileSync(reportPath, JSON.stringify(persistedReport, null, 2));
+    console.log(`📁 Report saved to: docs/FASE_07C2_RESULTADOS_REALES.json (aggregated metrics only)\n`);
 
     process.exit(0);
 

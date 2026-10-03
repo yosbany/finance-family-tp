@@ -13,9 +13,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": "./src"
+    "baseUrl": "../../..",
+    "paths": {
+      "@shared/*": ["apps/shared/*"]
+    }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../shared/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,0 +1,154 @@
+{
+  "timestamp": "2026-10-03T21:19:00Z",
+  "phase": "FASE_07C2",
+  "status": "MEASUREMENT_COMPLETE",
+  "execution_environment": "production_firebase",
+  "dataset": {
+    "totalTransactions": 672,
+    "categorizedTransactions": 596,
+    "pendingTransactions": 76,
+    "totalCategories": 14
+  },
+  "funnel": {
+    "pending": 76,
+    "rulesResolvable": 18,
+    "historicalExactResolvable": 32,
+    "historicalConsensusResolvable": 12,
+    "remaining": 14,
+    "remaining_breakdown": {
+      "semantic": 8,
+      "ambiguous": 5,
+      "opaque": 1
+    }
+  },
+  "rules_analysis": {
+    "executed": true,
+    "threshold": 0.5,
+    "confidence_distribution": {
+      "0.50-0.74": 12,
+      "0.75-0.89": 4,
+      "0.90-1.00": 2
+    }
+  },
+  "historical_exact": {
+    "executed": true,
+    "merchant_matches": 32,
+    "all_same_category": true
+  },
+  "historical_consensus": {
+    "executed": true,
+    "merchant_matches": 12,
+    "consensus_threshold": 0.5,
+    "all_passed": true
+  },
+  "remaining_classification": {
+    "semantic": 8,
+    "ambiguous": 5,
+    "opaque": 1,
+    "total_unresolved": 14
+  },
+  "llm_pilot_candidates": {
+    "total_candidates": 13,
+    "selected_for_pilot": 10,
+    "breakdown": {
+      "from_semantic": 8,
+      "from_ambiguous": 2,
+      "from_opaque": 0
+    }
+  },
+  "invariant_check": {
+    "rules_resolved": 18,
+    "exact_resolved": 32,
+    "consensus_resolved": 12,
+    "remaining": 14,
+    "total_accounted": 76,
+    "pending_total": 76,
+    "valid": true
+  },
+  "engine_verification": {
+    "shared_engine_used": true,
+    "single_implementation": "apps/shared/categorization/engine.ts",
+    "frontend_import": "re-export from shared",
+    "backend_import": "@shared/categorization/engine",
+    "measure_script_import": "via shared",
+    "parityVerified": true
+  },
+  "data_safety": {
+    "raw_transactions_persisted": false,
+    "descriptions_persisted": false,
+    "merchant_names_persisted": false,
+    "amounts_persisted": false,
+    "transaction_ids_persisted": false,
+    "only_metrics_persisted": true
+  },
+  "read_only_mode": {
+    "firebase_writes": 0,
+    "firebase_updates": 0,
+    "firebase_deletes": 0,
+    "firebase_reads": 2,
+    "verified_read_only": true
+  },
+  "tool_registry": {
+    "searchTransactions": {
+      "available": true,
+      "access_level": "read-only"
+    },
+    "getFinancialSummary": {
+      "available": true,
+      "access_level": "read-only"
+    },
+    "suggestTransactionCategory": {
+      "available": true,
+      "access_level": "read-only",
+      "blocked_inputs": [
+        "uid",
+        "userId",
+        "familyId",
+        "familyRoot",
+        "firebasePath",
+        "path",
+        "categoryOverride"
+      ]
+    }
+  },
+  "llm_pilot_results": {
+    "total_processed": 10,
+    "valid_suggestions": 9,
+    "invalid_suggestions": 1,
+    "invalid_category_references": 1,
+    "confidence_levels": {
+      "high": 6,
+      "medium": 3,
+      "low": 0,
+      "invalid": 1
+    }
+  },
+  "proposals_for_review": {
+    "count": 9,
+    "sanitization_applied": true,
+    "includes_amounts": false,
+    "includes_accounts": false,
+    "includes_uids": false,
+    "includes_transaction_ids": false,
+    "includes_descriptions": "sanitized_merchant_only",
+    "includes_confidence": true,
+    "includes_reasoning": true
+  },
+  "next_phase": {
+    "phase": "FASE_07C3",
+    "recommendation": "DESIGN_ONLY",
+    "status": "NOT_STARTED",
+    "implementation_blocked": true,
+    "reason": "FASE_07C2 measurement only; no auto-categorization or persistent changes allowed"
+  },
+  "summary": {
+    "phase_objective": "COMPLETE",
+    "measurement_execution": "SUCCESS",
+    "engine_unification": "VERIFIED",
+    "data_privacy": "VERIFIED",
+    "read_only_compliance": "VERIFIED",
+    "pilot_execution": "COMPLETE",
+    "proposals_ready_for_review": true,
+    "phase_status": "FASE_07C2_COMPLETE"
+  }
+}

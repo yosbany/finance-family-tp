@@ -14,7 +14,7 @@
  */
 
 import { AuthenticatedContext } from '../../auth/authenticatedContext.js';
-import { categorizeTransaction, CategorizationResult } from '../../shared/categorization/engine';
+import { categorizeTransaction, CategorizationResult } from '@shared/categorization/engine';
 
 /**
  * Tipos para sugerencias
