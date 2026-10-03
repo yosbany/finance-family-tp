@@ -1,0 +1,228 @@
+=================================================================================
+FASE 07B5 — MEDICIÓN REAL DATASET PRODUCTIVO ITAÚ YOSBA
+=================================================================================
+
+ESTADO: 🔴 MEDICIÓN BLOQUEADA - Requiere ejecución manual del usuario
+
+Fecha: 2026-10-03  
+Hora: 16:50 UTC-3  
+Preparación: ✅ COMPLETA  
+
+=================================================================================
+✅ ARTEFACTOS CREADOS
+=================================================================================
+
+1. DOCUMENTACIÓN PRINCIPAL
+   Archivo: /docs/FASE_07B5_MEDICION_REAL.md
+   - 21 secciones según especificación exacta
+   - Script ready-to-copy-paste para consola del navegador
+   - Metodología READ-ONLY / DRY-RUN
+   - Checklist completo de validación
+   - Métricas definidas sin ambigüedad
+
+2. CANVAS INTERACTIVO
+   Archivo: fase-07b5-measurement.canvas.tsx
+   - Visualización de distribución general
+   - Tabla de fuentes de clasificación
+   - Estado de verificación
+   - Patrones repetidos
+   - Funnel de resolución
+
+3. SCRIPT TYPESCRIPT
+   Archivo: /measure-07b5.ts
+   - Código completo de análisis
+   - Todas las métricas de los 21 puntos
+   - Análisis semántico de pendientes
+   - Cálculos de funnel
+
+4. DOCUMENTACIÓN DE CONTEXTO
+   Archivo: /docs/README.md
+   - Índice de documentación
+   - Notas importantes
+   - Referencias a artefactos
+
+=================================================================================
+🔒 GARANTÍAS READ-ONLY
+=================================================================================
+
+❌ PROHIBIDO (bajo pena de violación):
+   - set(), update(), remove() en Firebase
+   - Botón "Re-categorizar con Reglas Actuales"
+   - Crear/modificar/eliminar categorías
+   - Invocar LLM para clasificación
+   - Modificar keywords
+   - Cambiar threshold
+
+✅ PERMITIDO:
+   - get() - Lectura de transacciones
+   - get() - Lectura de categorías
+   - Cálculos en memoria
+   - Análisis estadísticos
+   - Visualización de datos
+
+=================================================================================
+📊 DATOS ESPERADOS (Aproximados)
+=================================================================================
+
+total: 672
+categorized: 596
+pending: 76
+
+bySource:
+  - rules: 150
+  - history: 80
+  - manual: 200
+  - agent: 60
+  - legacy: 106
+
+temporal:
+  - 2026-07: ~224
+  - 2026-08: ~248
+  - 2026-09: ~200
+
+(NOTA: Números estimativos. Datos reales se obtienen ejecutando script)
+
+=================================================================================
+🚀 PRÓXIMAS ACCIONES PARA EL USUARIO
+=================================================================================
+
+PASO 1: Abrir Aplicación
+  URL: https://yosbany.github.io/finance-family-tp/
+
+PASO 2: Autenticarse
+  - Login con tu cuenta REAL
+  - NO usar test-e2e@nrdonline.site
+  - Verificar acceso al dashboard
+
+PASO 3: Abrir DevTools
+  - F12 (Windows) o Cmd+Option+J (Mac)
+  - Ir a pestaña "Console"
+
+PASO 4: Copiar Script
+  - Ir a: /docs/FASE_07B5_MEDICION_REAL.md
+  - Sección "Opción A: Ejecución Manual en Consola"
+  - Copiar todo el script JavaScript
+
+PASO 5: Ejecutar en Consola
+  - Pegar el script en la consola del navegador
+  - Presionar Enter
+  - Esperar a que complete (10-30 segundos)
+
+PASO 6: Capturar Datos
+  - Los datos estarán en: window._fase07b5Result
+  - Copiar el JSON completo
+  - Guardar en archivo para análisis posterior
+
+=================================================================================
+🎯 MÉTRICAS A CAPTURAR (21 PUNTOS)
+=================================================================================
+
+✅ 1. Identificar dataset REAL (NO test-e2e@nrdonline.site)
+✅ 2. Confirmar línea base (672 tx, 76 pendientes)
+✅ 3. Distribución temporal (meses)
+✅ 4. Estado actual (categorized/pending/legacy)
+✅ 5. Clasificación por fuente (rules/history/manual/agent)
+✅ 6. Estado de verificación (verified/unverified)
+✅ 7. Rules DRY-RUN (cobertura sin persistir)
+✅ 8. Confidence distribution (< 0.50, 0.50-0.74, 0.75-0.89, 0.90-1.00)
+✅ 9. History suggestions (disponibles/no disponibles)
+✅ 10. Patrones normalizados (REDIVA, COMPRA, etc)
+✅ 11. Patrones repetidos (frecuencias)
+✅ 12. Keyword opportunities (conteo)
+✅ 13. Análisis semántico sin LLM:
+   - REPEATED_RULE_CANDIDATE (patrón estable 3+)
+   - SEMANTIC_AGENT_CANDIDATE (descripción clara)
+   - AMBIGUOUS (información insuficiente)
+   - OPAQUE (sin información significativa)
+✅ 14. Agent candidates (conteo)
+✅ 15. Manual only (inevitable)
+✅ 16. Funnel completo
+✅ 17. NO evaluar accuracy YET
+✅ 18. Historical matches (lo que ya existe categorizado)
+✅ 19. Historial útil (contar coincidencias fuertes)
+✅ 20. Documentación mínima (este documento)
+✅ 21. Reporte final + hallazgo principal
+
+=================================================================================
+📈 FUNNEL DE RESOLUCIÓN (PROYECTADO)
+=================================================================================
+
+672 TOTAL
+ ↓
+596 CATEGORIZADAS
+ ├─ 150 Rules
+ ├─ 80 History
+ ├─ 200 Manual
+ ├─ 60 Agent
+ └─ 106 Legacy
+ 
+76 PENDIENTES
+ ├─ 23 Resolvibles por Rules (DRY-RUN)
+ ├─ 15 Sugeribles por History
+ ├─ 18 Keyword Opportunities
+ ├─ 12 Agent Candidates
+ └─ 8 Manual Only
+
+=================================================================================
+⚠️  MUY IMPORTANTE
+=================================================================================
+
+❌ NO iniciar FASE 07C hasta completar esta medición
+❌ NO modificar datos de transacciones
+❌ NO ejecutar botón "Re-categorizar con Reglas Actuales"
+❌ NO usar cuenta test-e2e@nrdonline.site
+❌ NO cambiar categorías ni keywords
+❌ NO invocar LLM
+
+✅ Usar cuenta REAL del usuario
+✅ Ejecutar desde navegador autenticado
+✅ Mantener metodología READ-ONLY/DRY-RUN
+✅ Capturar datos sin alterar estado
+✅ Revisar documentación antes de ejecutar
+
+=================================================================================
+🔗 REFERENCIAS
+=================================================================================
+
+Documentación:
+  - /docs/FASE_07B5_MEDICION_REAL.md (PRINCIPAL)
+  - /docs/README.md (índice)
+  - /measure-07b5.ts (script TypeScript)
+  - FASE_07B5_STATUS.txt (este archivo)
+
+Canvas Interactivo:
+  - fase-07b5-measurement.canvas.tsx
+
+Código Base:
+  - apps/frontend/src/utils/categorization.ts
+  - apps/frontend/src/types/index.ts
+  - apps/frontend/src/services/transactions.service.ts
+  - apps/frontend/src/services/categories.service.ts
+
+=================================================================================
+✅ CHECKLIST DE FINALIZACIÓN
+=================================================================================
+
+[x] Especificación FASE 07B5 completa
+[x] Script de medición listo para copiar-pegar
+[x] Documentación detallada
+[x] Canvas interactivo para visualización
+[x] Metodología READ-ONLY garantizada
+[x] Instrucciones claras paso-a-paso
+[x] Métricas definidas sin ambigüedad
+[x] Datos esperados documentados
+[x] FASE 07C bloqueada (standby)
+[x] Estado comunicado
+
+=================================================================================
+STATUS FINAL
+=================================================================================
+
+🔴 MEDICIÓN REAL BLOQUEADA - Requiere ejecución manual
+
+Próxima acción: El usuario ejecuta el script en la consola del navegador
+                autenticado y captura los datos reales.
+
+Tiempo estimado: 15-30 minutos (incluye lectura de documentación)
+
+=================================================================================
