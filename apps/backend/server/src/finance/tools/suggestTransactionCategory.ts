@@ -23,6 +23,7 @@
 
 import { AuthenticatedContext } from '../../auth/authenticatedContext.js';
 import { searchUserTransactions } from '../repositories/transactions.repository.js';
+import { getUserCategories } from '../repositories/categories.repository.js';
 import { generateSuggestion } from '../services/classificationSuggestion.service.js';
 
 /**
@@ -125,7 +126,7 @@ export async function suggestTransactionCategory(
     // Validate input
     const validatedInput = validateSuggestInput(input);
 
-    // Fetch all transactions for this user (needed for historical context)
+    // Fetch all transactions for this user (needed for historical context and RULES)
     // Using searchUserTransactions with limit=500 to get all categorized transactions
     const result = await searchUserTransactions(context, {
       limit: 500,
@@ -137,6 +138,9 @@ export async function suggestTransactionCategory(
         'INCOMPLETE_DATA: User has too many transactions. Cannot generate reliable suggestions with incomplete data.'
       );
     }
+
+    // Fetch categories for RULES engine
+    const categories = await getUserCategories(context);
 
     // Build full transaction list
     const allTransactions = result.transactions;
@@ -155,11 +159,12 @@ export async function suggestTransactionCategory(
       };
     }
 
-    // Generate suggestion using the classification service
+    // Generate suggestion using the classification service (RULES + HISTORICAL + AGENT)
     const suggestion = await generateSuggestion(
       context,
       validatedInput.transactionId,
-      allTransactions as any[]
+      allTransactions as any[],
+      categories
     );
 
     // Sanitize output: remove internal metadata, keep only essential info
