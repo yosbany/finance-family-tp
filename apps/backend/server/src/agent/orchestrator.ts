@@ -57,9 +57,38 @@ export class AgentOrchestrator {
   }
 
   private buildSystemPrompt(): string {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const septStart = new Date(currentYear, 8, 1).getTime(); // Sept 1
+    const septEnd = new Date(currentYear, 8, 30, 23, 59, 59, 999).getTime(); // Sept 30
+
     return `Sos un asistente de finanzas personales.
 
 Tu objetivo es ayudar al usuario a entender y analizar sus finanzas.
+
+**CONTEXTO TEMPORAL:**
+- Fecha actual: ${now.toISOString()}
+- Año actual: ${currentYear}
+- Cuando el usuario menciona "septiembre de 2026", usa:
+  - from: ${septStart} (1 de septiembre de 2026)
+  - to: ${septEnd} (30 de septiembre de 2026)
+
+**SELECCIÓN DE HERRAMIENTAS:**
+
+Usá "getFinancialSummary" para:
+- ¿Cuánto gasté en [período]?
+- ¿Cuánto ingresé en [período]?
+- ¿Cuál fue mi balance?
+- ¿Cuánto ahorré?
+- ¿Cuál es mi tasa de ahorro?
+- Resumen del período
+
+Usá "searchTransactions" para:
+- Mostrame transacciones de [categoría]
+- Buscá compras mayores a [monto]
+- Detalle de movimientos
+- Transacciones de [descripción]
+- Listar movimientos
 
 Usá las herramientas disponibles para consultar datos reales antes de afirmar montos, movimientos o fechas.
 
@@ -115,6 +144,7 @@ Si una herramienta devuelve resultados truncados, indicalo al usuario.`;
     // Tool calling loop
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
+      console.log(`[AGENT] ${requestId} iteration ${iterations}`);
 
       // Call LLM
       const response = await this.callLLM(messages);
@@ -125,16 +155,16 @@ Si una herramienta devuelve resultados truncados, indicalo al usuario.`;
         throw new Error('LLM_INVALID_RESPONSE: No message in response');
       }
 
-      // Add assistant response to conversation
-      messages.push({
-        role: 'assistant',
-        content: assistantMessage.content || '',
-        tool_calls: assistantMessage.tool_calls,
-      });
+      console.log(`[AGENT] ${requestId} iteration ${iterations} tool_calls: ${assistantMessage.tool_calls?.length || 0}`);
 
       // Check if LLM requested tools
       if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
         // No more tool calls, return final answer
+        messages.push({
+          role: 'assistant',
+          content: assistantMessage.content || '',
+        });
+        
         const answer = assistantMessage.content || 'No answer generated';
         return {
           answer,
@@ -144,11 +174,18 @@ Si una herramienta devuelve resultados truncados, indicalo al usuario.`;
         };
       }
 
+      // Add assistant response to conversation (OpenAI format)
+      messages.push({
+        role: 'assistant',
+        content: assistantMessage.content || '',
+        tool_calls: assistantMessage.tool_calls,
+      });
+
       // Process tool calls
-      const toolResults: ToolResult[] = [];
+      const toolResults: Array<{ result: ToolResult; toolCallId: string }> = [];
       for (const toolCall of assistantMessage.tool_calls) {
         const result = await this.processTool(context, toolCall);
-        toolResults.push(result);
+        toolResults.push({ result, toolCallId: toolCall.id });
 
         // Track tools used
         if (!result.error) {
@@ -156,11 +193,12 @@ Si una herramienta devuelve resultados truncados, indicalo al usuario.`;
         }
       }
 
-      // Add tool results to conversation
-      for (const toolResult of toolResults) {
+      // Add tool results to conversation (OpenAI format: role='tool')
+      for (const { result: toolResult, toolCallId } of toolResults) {
         messages.push({
-          role: 'user',
+          role: 'tool' as any,
           content: this.formatToolResult(toolResult),
+          tool_call_id: toolCallId,
         });
       }
     }

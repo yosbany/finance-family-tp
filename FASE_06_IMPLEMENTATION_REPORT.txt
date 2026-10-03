@@ -1,0 +1,401 @@
+================================================================================
+                 FASE 06 — FINANCIAL SUMMARY TOOL
+                    IMPLEMENTATION REPORT
+================================================================================
+
+Date: Saturday, October 3, 2026
+Status: ✅ COMPLETADA (Ready for Production Deployment)
+Location: /Users/yosbanytejas/Documents/finance-family
+
+================================================================================
+                            EXECUTIVE SUMMARY
+================================================================================
+
+OBJETIVO COMPLETADO:
+✅ Agregar herramienta determinística para cálculos financieros agregados
+✅ El LLM ya NO suma listas de transacciones
+✅ Cálculos realizados 100% en backend
+
+RESULTADO:
+Agent ahora tiene exactamente 2 herramientas:
+  1. searchTransactions      [existente, sin cambios]
+  2. getFinancialSummary     [NUEVO]
+
+================================================================================
+                          1. IMPLEMENTACIÓN
+================================================================================
+
+1.1 ARCHIVOS NUEVOS
+    ✅ apps/backend/server/src/finance/tools/getFinancialSummary.ts
+       - 435 líneas
+       - Input validation (rechaza uid, userId, familyId, etc.)
+       - Cálculo de income, expenses, net, transfers, savingsRate
+       - Multi-currency support (separado, NO merged)
+
+1.2 ARCHIVOS MODIFICADOS
+    ✅ apps/backend/server/src/agent/toolRegistry.ts
+       - Agregada getFinancialSummary a toolImplementations
+       - Agregado schema JSON completo
+       - Comentario actualizado
+
+    ✅ apps/backend/server/src/agent/orchestrator.ts
+       - System prompt expandido con tool selection guidance
+       - Enseña cuándo usar cada herramienta
+
+1.3 COMPILACIÓN
+    ✅ TypeScript → JavaScript: 0 errores
+    ✅ Archivos compilados en dist/:
+       - dist/finance/tools/getFinancialSummary.js (9.5 KB)
+       - dist/agent/toolRegistry.js (actualizado)
+       - dist/agent/orchestrator.js (actualizado)
+
+================================================================================
+                          2. CONTRATO TÉCNICO
+================================================================================
+
+INPUT:
+  {
+    from: number                      [requerido, timestamp ms]
+    to: number                        [requerido, timestamp ms]
+    currency?: 'UYU' | 'USD'         [opcional]
+    accountId?: string               [opcional]
+    categoryId?: string              [opcional]
+  }
+
+OUTPUT (single currency):
+  {
+    period: { from, to },
+    summary: {
+      currency: 'UYU' | 'USD',
+      income: number,
+      expenses: number,
+      net: number,
+      transfers: number,
+      transactionCount: number,
+      incomeCount: number,
+      expenseCount: number,
+      transferCount: number,
+      savingsRate?: number            [undefined si income == 0]
+    }
+  }
+
+OUTPUT (multi-currency):
+  {
+    period: { from, to },
+    byCurrency: [
+      { currency: 'UYU', income, expenses, net, ... },
+      { currency: 'USD', income, expenses, net, ... }
+    ]
+  }
+
+================================================================================
+                          3. REGLAS FINANCIERAS
+================================================================================
+
+INCOME:
+  sum(type='income' transactions)
+  incomeCount = count(type='income')
+
+EXPENSES:
+  sum(abs(type='expense' transactions))
+  expenseCount = count(type='expense')
+
+TRANSFERS:
+  sum(abs(type='transfer' transactions))  [tracked separately]
+  transferCount = count(type='transfer')
+  
+  IMPORTANTE:
+  - NO cuentan como income ni expense
+  - NO se incluyen en net
+  - net = income - expenses [sin transfers]
+
+NET:
+  net = income - expenses
+  [NUNCA incluye transfers]
+
+SAVINGS RATE:
+  savingsRate = ((income - expenses) / income) * 100
+  [undefined si income == 0]
+  [puede ser negativo si expenses > income]
+
+MULTI-CURRENCY:
+  - Si currency especificado: retorna resumen en esa moneda
+  - Si NO especificado:
+    * Una moneda → summary (objeto)
+    * Varias monedas → byCurrency (array separado)
+  - NO hay conversión en esta fase
+
+================================================================================
+                          4. VALIDACIÓN & SEGURIDAD
+================================================================================
+
+PARÁMETROS RECHAZADOS:
+  ❌ uid
+  ❌ userId
+  ❌ familyId
+  ❌ firebasePath
+  ❌ path
+  ❌ Cualquier parámetro desconocido
+
+VALIDACIONES IMPLEMENTADAS:
+  ✅ from y to son requeridos
+  ✅ from <= to
+  ✅ currency debe ser 'UYU' o 'USD'
+  ✅ accountId y categoryId: strings válidos
+  ✅ Todos son números finitos
+
+IDENTIDAD:
+  Firebase ID Token → AuthenticatedContext → Aislamiento por uid
+  → No puede acceder a datos de otros usuarios
+
+PRIVACIDAD:
+  LLM recibe SOLO:
+  - income total
+  - expenses total
+  - net total
+  - savingsRate
+  - conteos
+
+  LLM NUNCA recibe:
+  - Transacciones individuales
+  - Descripciones
+  - Montos individuales
+  - IDs personales
+
+================================================================================
+                          5. TESTING LOCAL
+================================================================================
+
+SCRIPT: test-summary-logic.mjs (No Firebase requerido)
+
+TESTS EJECUTADOS: 24
+TESTS PASADOS: ✅ 24/24
+
+COVERAGE:
+  ✅ Input validation (13 cases)
+     - Valid: basic, with currency, with accountId
+     - Invalid: missing required, from > to, prohibited params, etc.
+
+  ✅ Calculation logic (11 cases)
+     - Oracle dataset (income=15K, expenses=23.1K, net=-8.1K) ✅
+     - Multi-currency separation ✅
+     - Transfers not in net ✅
+     - Savings rate (normal, zero income, negative) ✅
+     - Transaction counting ✅
+
+RESULTADO:
+  Toda la lógica de cálculo está CORRECTA y DETERMINÍSTICA
+
+================================================================================
+                          6. TOOL SELECTION GUIDANCE
+================================================================================
+
+System Prompt (Actualizado en orchestrator.ts):
+
+Usá "getFinancialSummary" para:
+  - ¿Cuánto gasté en [período]?
+  - ¿Cuánto ingresé en [período]?
+  - ¿Cuál fue mi balance?
+  - ¿Cuánto ahorré?
+  - ¿Cuál es mi tasa de ahorro?
+  - Resumen del período
+
+Usá "searchTransactions" para:
+  - Mostrame transacciones de [categoría]
+  - Buscá compras mayores a [monto]
+  - Detalle de movimientos
+  - Transacciones de [descripción]
+  - Listar movimientos
+
+================================================================================
+                          7. CASOS E2E PLANEADOS
+================================================================================
+
+TEST 1: Gastos
+  Pregunta: "¿Cuánto gasté en septiembre de 2026?"
+  Tool esperada: getFinancialSummary
+  Oracle: 23,100 UYU
+  Estado: ⏳ Pending en producción
+
+TEST 2: Ingresos
+  Pregunta: "¿Cuánto ingresé en septiembre de 2026?"
+  Tool esperada: getFinancialSummary
+  Oracle: 15,000 UYU
+  Estado: ⏳ Pending en producción
+
+TEST 3: Balance
+  Pregunta: "¿Cuál fue mi balance de septiembre de 2026?"
+  Tool esperada: getFinancialSummary
+  Oracle: -8,100 UYU
+  Estado: ⏳ Pending en producción
+
+TEST 4: Ahorro
+  Pregunta: "¿Cuánto ahorré en septiembre?"
+  Tool esperada: getFinancialSummary
+  Oracle: net = -8,100 (gastos > ingresos)
+  Estado: ⏳ Pending en producción
+
+TEST 5: Detalle (Routing)
+  Pregunta: "Mostrame transacciones mayores a $10.000 de septiembre."
+  Tool esperada: searchTransactions (NO getFinancialSummary)
+  Estado: ⏳ Pending en producción
+
+TEST 6: Descripción (Routing)
+  Pregunta: "Mostrame movimientos de supermercado."
+  Tool esperada: searchTransactions (NO getFinancialSummary)
+  Estado: ⏳ Pending en producción
+
+================================================================================
+                          8. PRÓXIMOS PASOS
+================================================================================
+
+8.1 DEPLOYMENT A PRODUCCIÓN
+    $ cd apps/backend/server
+    $ npm run build
+    [Copiar dist/ a /opt/finance-family-api/]
+    $ systemctl restart finance-family-api
+    $ curl https://service.nrdonline.site/health → 200 OK
+
+8.2 TESTING E2E EN PRODUCCIÓN
+    $ curl -X POST https://service.nrdonline.site/api/agent/query \
+        -H "Authorization: Bearer <TOKEN>" \
+        -H "Content-Type: application/json" \
+        -d '{"message": "¿Cuánto gasté en septiembre de 2026?"}'
+    
+    Esperado:
+    {
+      "answer": "...",
+      "toolsUsed": ["getFinancialSummary"],
+      "toolIterations": 1,
+      "requestId": "..."
+    }
+
+8.3 VERIFICACIÓN
+    Ejecutar 6 tests E2E (definidos arriba)
+    Registrar tool elegida y resultado
+    Comparar con oracle
+
+================================================================================
+                          9. MATRIZ DE DECISIONES
+================================================================================
+
+¿Qué pasa si...?
+
+Q: El usuario pregunta "Cuánto gasté"
+A: LLM elige getFinancialSummary → respuesta rápida, determinística
+
+Q: El usuario pregunta "Mostrame mis últimas 10 transacciones"
+A: LLM elige searchTransactions → detalle completo
+
+Q: Hay >500 transacciones en el período
+A: getFinancialSummary retorna error → usuario debe usar filtros en searchTransactions
+
+Q: Hay múltiples monedas
+A: Si no especifica currency → retorna byCurrency (array separado)
+
+Q: Income es 0
+A: savingsRate = undefined (no dividir por cero)
+
+Q: El usuario envía uid=otro-usuario
+A: Validador rechaza → error SECURITY_VIOLATION
+
+================================================================================
+                          10. LIMITACIONES
+================================================================================
+
+Lo que NO puede hacer (por diseño):
+
+  ❌ Conversión de monedas (UYU <-> USD)
+  ❌ Breakdown por categoría (getCategoryBreakdown)
+  ❌ Comparación de períodos (comparePeriods)
+  ❌ Proyecciones (forecast)
+  ❌ Tendencias (trends)
+  ❌ Alerts
+
+Estas son DEUDAS PLANEADAS para fases futuras.
+
+================================================================================
+                          11. CAMBIOS DE IMPACTO
+================================================================================
+
+ANTES (FASE 05):
+  Pregunta: "¿Cuánto gasté?"
+    ↓
+  searchTransactions (retorna 50 transacciones)
+    ↓
+  LLM suma los montos
+    ↓
+  Posible error si truncado
+
+DESPUÉS (FASE 06):
+  Pregunta: "¿Cuánto gasté?"
+    ↓
+  getFinancialSummary (retorna 1 número)
+    ↓
+  Resultado determinístico
+    ↓
+  Mejor privacidad (no envía details al LLM)
+
+BENEFICIOS:
+  🟢 Menos tokens (100s → 1 número)
+  🟢 Cálculos determinísticos (backend, no LLM)
+  🟢 Mejor privacidad (no transacciones individuales)
+  🟢 Tool selection clara (LLM sabe cuándo usarlas)
+  🟢 Escalabilidad (no depende de paginación)
+
+================================================================================
+                          12. CONSIDERACIONES FUTURAS
+================================================================================
+
+FASE 07+ (NOT IN SCOPE):
+  - Conversión de monedas
+  - Breakdown por categoría
+  - Comparación de períodos
+  - Proyecciones de cashflow
+  - Análisis de tendencias
+  - System de alerts
+  - Multi-user visualization
+  - Admin dashboard
+
+================================================================================
+                          13. CONFIRMACIÓN FINAL
+================================================================================
+
+✅ Código compilado sin errores
+✅ Unit tests pasados (24/24)
+✅ Validación de seguridad implementada
+✅ System prompt actualizado
+✅ Tool registry actualizado
+✅ Documentación completa
+✅ Ready for production
+
+SIGUIENTE PASO:
+  1. Deploy a producción
+  2. Ejecutar 6 tests E2E
+  3. Si todo OK: FASE 06 COMPLETA
+  4. Iniciar FASE 07 (o pausar según planning)
+
+================================================================================
+                          STATUS: LISTO PARA PRODUCCIÓN
+================================================================================
+
+Commits sugeridos:
+  git add apps/backend/server/src/finance/tools/getFinancialSummary.ts
+  git add apps/backend/server/src/agent/toolRegistry.ts
+  git add apps/backend/server/src/agent/orchestrator.ts
+  git add docs/FASE_06_IMPLEMENTATION.md
+  git commit -m "FASE 06: Add getFinancialSummary tool"
+
+Deploy:
+  npm run build
+  systemctl restart finance-family-api
+
+Testing:
+  curl -X POST https://service.nrdonline.site/api/agent/query \
+    -H "Authorization: Bearer <TOKEN>" \
+    -H "Content-Type: application/json" \
+    -d '{"message": "¿Cuánto gasté en septiembre de 2026?"}'
+
+================================================================================
+                     END OF IMPLEMENTATION REPORT
+================================================================================

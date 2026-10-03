@@ -2,7 +2,10 @@
  * Tool Registry
  * 
  * Centralized registry of available tools for the agent.
- * Currently only searchTransactions is available.
+ * 
+ * Available tools:
+ * - searchTransactions: Search individual transactions with filters
+ * - getFinancialSummary: Get aggregated financial metrics for a period
  * 
  * SECURITY:
  * - Only explicitly registered tools can be executed
@@ -17,6 +20,11 @@ import {
   SearchTransactionsInput,
   SearchTransactionsOutput,
 } from '../finance/tools/searchTransactions.js';
+import {
+  getFinancialSummary,
+  GetFinancialSummaryInput,
+  GetFinancialSummaryOutput,
+} from '../finance/tools/getFinancialSummary.js';
 
 export interface ToolDefinition {
   name: string;
@@ -30,6 +38,7 @@ export interface ToolDefinition {
 
 export interface ToolResult {
   tool: string;
+  tool_call_id?: string;
   result: unknown;
   error?: string;
 }
@@ -46,6 +55,9 @@ type ToolExecutor = (
 const toolImplementations: Record<string, ToolExecutor> = {
   searchTransactions: async (context: AuthenticatedContext, args: unknown) => {
     return searchTransactions(context, args);
+  },
+  getFinancialSummary: async (context: AuthenticatedContext, args: unknown) => {
+    return getFinancialSummary(context, args);
   },
 };
 
@@ -113,6 +125,38 @@ export const toolSchemas: ToolDefinition[] = [
           description: 'Pagination offset (default 0).',
         },
       },
+    },
+  },
+  {
+    name: 'getFinancialSummary',
+    description:
+      'Returns deterministic income, expense and net totals for a financial period. Use this tool for questions about total spending, total income, balance, savings or financial summaries.',
+    schema: {
+      type: 'object',
+      properties: {
+        from: {
+          type: 'number',
+          description: 'Start date (Unix timestamp in milliseconds). Inclusive. Required.',
+        },
+        to: {
+          type: 'number',
+          description: 'End date (Unix timestamp in milliseconds). Inclusive. Required.',
+        },
+        currency: {
+          type: 'string',
+          enum: ['UYU', 'USD'],
+          description: 'Filter by currency. If not specified and multiple currencies exist, returns results separated by currency.',
+        },
+        accountId: {
+          type: 'string',
+          description: 'Filter by account ID (optional).',
+        },
+        categoryId: {
+          type: 'string',
+          description: 'Filter by category ID (optional).',
+        },
+      },
+      required: ['from', 'to'],
     },
   },
 ];
