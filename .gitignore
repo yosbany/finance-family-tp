@@ -29,4 +29,8 @@ dist-ssr
 # .env.production is committed for GitHub Pages deployment
 # !.env.production
 
+# Firebase service account credentials (never commit)
+*-firebase-adminsdk-*.json
+finance-family-tp-firebase-adminsdk-*.json
+
 # Made with Bob

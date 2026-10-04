@@ -15,6 +15,7 @@
     "phase07c2:test": "npx tsx scripts/run-phase07c2-pipeline.ts"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.35",
     "date-fns": "^3.3.1",
     "firebase": "^10.8.0",
     "papaparse": "^5.4.1",

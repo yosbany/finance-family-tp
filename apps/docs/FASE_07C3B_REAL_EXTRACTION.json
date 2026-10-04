@@ -1,0 +1,119 @@
+{
+  "timestamp": "2026-10-03T19:05:39.798Z",
+  "phase": "FASE_07C3B",
+  "firebase": "finance-family-tp",
+  "path": "/family",
+  "dataset": {
+    "total": 672,
+    "categorized": 596,
+    "pending": 76,
+    "categories": 14
+  },
+  "funnel": {
+    "RULES": 0,
+    "HISTORICAL_EXACT": 6,
+    "HISTORICAL_CONSENSUS": 0,
+    "REMAINING": 70
+  },
+  "historical_exact_cases": [
+    {
+      "caseId": "H1",
+      "movimiento": "FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    },
+    {
+      "caseId": "H2",
+      "movimiento": "COMPRA      FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    },
+    {
+      "caseId": "H3",
+      "movimiento": "COMPRA      FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    },
+    {
+      "caseId": "H4",
+      "movimiento": "FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    },
+    {
+      "caseId": "H5",
+      "movimiento": "COMPRA      FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    },
+    {
+      "caseId": "H6",
+      "movimiento": "FROG",
+      "categoriaSugerida": "Alimentación",
+      "evidencia": "2/2 antecedentes con misma categoría",
+      "categoryId": "-OvakfDetF7DxZd0cxkr"
+    }
+  ],
+  "llm_pilot": {
+    "candidates_available": 70,
+    "will_process": 10,
+    "candidates": [
+      {
+        "caseId": "A1",
+        "description": "ASISTENCIA 365",
+        "transactionId": "-P0hVFjFRnoPLR_DAQ9s"
+      },
+      {
+        "caseId": "A2",
+        "description": "MIX UP (1/3)",
+        "transactionId": "-P0hVFvin_D0B5f9eiHA"
+      },
+      {
+        "caseId": "A3",
+        "description": "DREAMSTORE OCA (1/3)",
+        "transactionId": "-P0hVG7qyj_F9c_zaKLC"
+      },
+      {
+        "caseId": "A4",
+        "description": "RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############3759",
+        "transactionId": "-P0hXMG8t_G6zo8PZcE5"
+      },
+      {
+        "caseId": "A5",
+        "description": "COMPRA CON TARJETA DEBITO DELICIAS DA D.HANDY., Q7DMONTEVIDEO TARJ: ############3759",
+        "transactionId": "-P0hYCIwks7X0I7SLZR_"
+      },
+      {
+        "caseId": "A6",
+        "description": "COMPRA CON TARJETA DEBITO DELICIAS DA D.HANDY., Q7DMONTEVIDEO TARJ: ############3759",
+        "transactionId": "-P0hYgAuv5PLoQK_k2mQ"
+      },
+      {
+        "caseId": "A7",
+        "description": "COMPRA CON TARJETA DEBITO COMPADRE, MONTEVIDEO TARJ: ############3759",
+        "transactionId": "-P0hYgRKaqCQwt403dX9"
+      },
+      {
+        "caseId": "A8",
+        "description": "DEBITO OPERACION EN BANCA DIGITAL P--",
+        "transactionId": "-P0hYh93dF_tInrXis9X"
+      },
+      {
+        "caseId": "A9",
+        "description": "DEBITO OPERACION EN BANCA DIGITAL P--",
+        "transactionId": "-P0hYhCLeJAjZBHSOhRv"
+      },
+      {
+        "caseId": "A10",
+        "description": "DEBITO OPERACION EN BANCA DIGITAL PCREDITO",
+        "transactionId": "-P0hYz9-ku8V81YpHQ80"
+      }
+    ]
+  },
+  "status": "READY_FOR_LLM_EXECUTION"
+}

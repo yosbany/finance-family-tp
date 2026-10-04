@@ -1,0 +1,89 @@
+{
+  "histórico_exacto": {
+    "status": "Procesado con ibm-ica model via Cursor SDK",
+    "nota": "Resultados de categorización automática de 10 transacciones reales"
+  },
+  "agente_resultados": {
+    "A1": {
+      "description": "ASISTENCIA 365",
+      "status": "SUGGESTED",
+      "suggestedCategory": "Servicios y Utilidades",
+      "agentConfidence": 0.85,
+      "reasoningSummary": "Nombre sugiere servicio de suscripción recurrente"
+    },
+    "A2": {
+      "description": "MIX UP (1/3)",
+      "status": "UNCERTAIN",
+      "suggestedCategory": "Entretenimiento",
+      "agentConfidence": 0.62,
+      "reasoningSummary": "Nombre ambiguo, podría ser restaurante o establecimiento comercial"
+    },
+    "A3": {
+      "description": "DREAMSTORE OCA (1/3)",
+      "status": "SUGGESTED",
+      "suggestedCategory": "Entretenimiento",
+      "agentConfidence": 0.8,
+      "reasoningSummary": "OCA es cadena de juegos y diversión, DREAMSTORE sugiere tienda"
+    },
+    "A4": {
+      "description": "RETIRO CORRESPONSALES, MONTEVIDEO",
+      "status": "SUGGESTED",
+      "suggestedCategory": "Transferencias",
+      "agentConfidence": 0.88,
+      "reasoningSummary": "Retiro en corresponsal indica operación bancaria de efectivo"
+    },
+    "A5": {
+      "description": "COMPRA CON TARJETA DEBITO DELICIAS DA D.HANDY., Q7DMONTEVIDEO",
+      "status": "SUGGESTED",
+      "suggestedCategory": "Alimentación",
+      "agentConfidence": 0.9,
+      "reasoningSummary": "DELICIAS claramente indica venta de alimentos/bebidas"
+    },
+    "A6": {
+      "description": "COMPRA CON TARJETA DEBITO DELICIAS DA D.HANDY., Q7DMONTEVIDEO",
+      "status": "SUGGESTED",
+      "suggestedCategory": "Alimentación",
+      "agentConfidence": 0.9,
+      "reasoningSummary": "Transacción duplicada, mismo comercio DELICIAS"
+    },
+    "A7": {
+      "description": "COMPRA CON TARJETA DEBITO COMPADRE, MONTEVIDEO",
+      "status": "UNCERTAIN",
+      "suggestedCategory": "Otros",
+      "agentConfidence": 0.55,
+      "reasoningSummary": "COMPADRE podría ser bar, restaurante o nombre genérico comercial"
+    },
+    "A8": {
+      "description": "DEBITO OPERACION EN BANCA DIGITAL P--",
+      "status": "UNCERTAIN",
+      "suggestedCategory": "Servicios y Utilidades",
+      "agentConfidence": 0.6,
+      "reasoningSummary": "Operación digital incompleta, código 'P--' no clarifica propósito"
+    },
+    "A9": {
+      "description": "DEBITO OPERACION EN BANCA DIGITAL P--",
+      "status": "UNCERTAIN",
+      "suggestedCategory": "Servicios y Utilidades",
+      "agentConfidence": 0.6,
+      "reasoningSummary": "Duplicada, operación banca digital probablemente comisión o servicio"
+    },
+    "A10": {
+      "description": "DEBITO OPERACION EN BANCA DIGITAL PCREDITO",
+      "status": "UNCERTAIN",
+      "suggestedCategory": "Transferencias",
+      "agentConfidence": 0.7,
+      "reasoningSummary": "PCREDITO sugiere línea de crédito, operación financiera interna"
+    }
+  },
+  "métricas": {
+    "processed": 10,
+    "suggested": 5,
+    "uncertain": 5,
+    "invalidCategory": 0,
+    "errors": 0,
+    "llmCallsReal": 10,
+    "invariante_válida": true
+  },
+  "estado": "VALIDACIÓN_HUMANA_LISTA",
+  "timestamp": "2026-10-04T10:58:28.826Z"
+}
