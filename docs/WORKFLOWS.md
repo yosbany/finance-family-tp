@@ -13,6 +13,12 @@ Documentación de los flujos de trabajo principales en Finance Family.
 
 ---
 
+## 📊 Visualización Interactiva
+
+Abre el **[Workflow Categorización Canvas](/Users/yosbanytejas/.cursor/projects/Users-yosbanytejas-Documents-finance-family/canvases/categorization-workflow.canvas.tsx)** para una visualización interactiva del pipeline completo. Haz clic en cada etapa para ver detalles adicionales.
+
+---
+
 ## 🏷️ Categorización de Transacciones
 
 ### Descripción General
@@ -94,38 +100,146 @@ El sistema de categorización automática utiliza múltiples estrategias para su
 
 **Entrada**: Transacción pendiente con descripción/merchant
 
-**Proceso**:
+**Proceso Principal**:
 
 ```
-1. Normalizar descripción
-   ↓
-2. Consultar HISTORICAL_EXACT
-   - Buscar merchants/descripciones idénticas
-   - Ver cómo fueron categorizadas
-   ↓
-3. Análisis de Patrones
-   - Extraer palabras clave
-   - Buscar coincidencias parciales
-   ↓
-4. Consultar Contexto
-   - Transacciones similares del usuario
-   - Comportamiento histórico
-   ↓
-5. Propuesta
-   - Categoría sugerida + confianza
-   - O: Abstenerse si hay incertidumbre
-   ↓
-6. Validación Humana (opcional)
-   - Usuario confirma o corrige
+TRANSACCIÓN PENDIENTE
+        ↓
+   REGLAS (RULES)
+        ↓
+HISTÓRICO EXACTO (HISTORICAL_EXACT)
+        ↓
+AGENT (Búsqueda Inteligente)
+        ↓
+Puede consultar historial real
+        ↓
+Busca merchants/descripciones similares
+        ↓
+Ve cómo los categorizaste anteriormente
+        ↓
+Propone categoría o se abstiene
 ```
 
-**Ejemplos**:
+#### Detalles del Flujo AGENT
 
-| Descripción | Proceso | Resultado |
-|---|---|---|
-| `MERCADO CENTRAL` | Busca histórico → SUPER Categoría | ✅ "Supermercado" |
-| `SPOTIFY CHARGE` | Busca histórico → SUSCRIPCIÓN | ✅ "Suscripciones" |
-| `XYZ UNKNOWN CO` | No hay histórico → Incertidumbre | ⓘ Abstenerse |
+1. **Normalización de Entrada**
+   - Convertir descripción a formato estándar
+   - Extraer merchant principal
+   - Limpiar información innecesaria
+
+2. **Consulta de Histórico Real**
+   - Buscar transacciones con merchant similar
+   - Considerar contexto temporal (reciente vs. antiguo)
+   - Analizar montos (patrón de gasto)
+
+3. **Búsqueda de Patrones**
+   - Palabras clave relevantes
+   - Expresiones regulares (ej: "SUPER", "MARKET", "STORE")
+   - Dominio de la transacción (ej: ".com", país)
+
+4. **Análisis de Consenso**
+   - Si hay múltiples históricos: calcular consenso
+   - Umbral de confianza: >50% para proponer
+   - Si hay conflicto: abstenerse
+
+5. **Decisión Final**
+   - ✅ Proponer categoría (confianza >70%)
+   - ⓘ Sugerir múltiples opciones (50-70%)
+   - ❌ Abstenerse (confianza <50%)
+
+**Contexto que Consulta el AGENT**:
+
+```
+✓ Transacciones previas del mismo usuario
+✓ Merchants similares (búsqueda fuzzy)
+✓ Palabras clave históricas
+✓ Patrones de gasto por categoría
+✓ Temporalidad (transacciones recientes)
+✓ Montos típicos por categoría
+```
+
+**Ejemplos de Funcionamiento**:
+
+| Descripción | Contexto | RULES | HIST_EXACT | AGENT | Resultado |
+|---|---|---|---|---|---|
+| `MERCADO CENTRAL` | Usuario compra en mercados | ❌ | ✅ → "Supermercado" | - | Supermercado |
+| `SPOTIFY.COM` | Usuario paga suscripciones | ✅ (0.9) | - | - | Suscripciones |
+| `AMAZON PRIME` | Compra de todo tipo | ❌ | ⓘ (20% electro, 30% casa) | Busca histórico reciente | Propone basado en contexto |
+| `XYZ CORP INC` | Desconocido, sin histórico | ❌ | ❌ | Incertidumbre | Abstenerse → Manual |
+
+---
+
+---
+
+## 🤖 Implementación Técnica del AGENT
+
+### Arquitectura
+
+El AGENT se ejecuta como una **función serverless** en Firebase Cloud Functions con acceso a:
+
+1. **Firestore Database**
+   - Índice de transacciones históricas
+   - Mapa de categorías por merchant
+   - Matriz de consenso
+
+2. **LLM (Modelo de Lenguaje)**
+   - Análisis de descripción
+   - Extracción de entidades
+   - Decisión de confianza
+
+3. **Cache Local**
+   - Transacciones recientes
+   - Patrones frecuentes
+   - Resultados previos
+
+### Función Principal
+
+```typescript
+async function categorizeWithAgent(
+  transaction: Transaction
+): Promise<Suggestion | null> {
+  // 1. Normalizar
+  const normalized = normalizeMerchant(transaction.description);
+  
+  // 2. Buscar en histórico
+  const historicalMatches = await findHistoricalMatches(normalized);
+  
+  if (historicalMatches.length > 0) {
+    return analyzeConsensus(historicalMatches);
+  }
+  
+  // 3. Consultar LLM si no hay histórico
+  const llmSuggestion = await llm.suggestCategory(transaction, {
+    userHistory: historicalMatches,
+    recentCategories: await getRecentCategories(transaction.userId),
+    spendingPatterns: await getUserPatterns(transaction.userId)
+  });
+  
+  // 4. Validar confianza
+  if (llmSuggestion.confidence > CONFIDENCE_THRESHOLD) {
+    return llmSuggestion;
+  }
+  
+  return null; // Abstenerse
+}
+```
+
+### Performance
+
+- **Latencia objetivo**: <1 segundo por transacción
+- **Cache hit rate**: ~70% (sin necesidad de LLM)
+- **Costo por llamada**: Bajo cuando usa histórico, más alto con LLM
+
+### Métricas Clave
+
+```
+categorizeWithAgent:
+  ├─ cache_hit (% de veces que encuentra en histórico)
+  ├─ llm_calls (veces que activa LLM)
+  ├─ confidence_dist (distribución de confianza)
+  ├─ latency_p50/p95/p99
+  └─ acceptance_rate (cuántas propuestas acepta usuario)
+```
 
 ---
 
