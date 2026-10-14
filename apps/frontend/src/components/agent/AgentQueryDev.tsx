@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { getTransactions } from '../../services/transactions.service';
+import { getCategories } from '../../services/categories.service';
+import { AssistantChart, buildAssistantChart } from './assistantChart';
+import { AssistantChartView } from './AssistantChartView';
 
 interface AgentResponse {
   answer: string;
@@ -15,6 +19,7 @@ interface ChatMessage {
   toolsUsed?: string[];
   toolIterations?: number;
   error?: boolean;
+  chart?: AssistantChart | null;
 }
 
 const SUGGESTIONS = [
@@ -23,6 +28,8 @@ const SUGGESTIONS = [
   '¿Tuve algún gasto mayor a $10.000?',
   'Buscá movimientos de supermercado',
   '¿Qué puedo consultar de mis finanzas?',
+  'Hacé un gráfico de gastos por categoría',
+  'Mostrame la evolución de ingresos y gastos',
 ];
 
 export function AgentQueryDev() {
@@ -56,6 +63,10 @@ export function AgentQueryDev() {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', text: trimmed }]);
     setLoading(true);
 
+    const chartPromise = Promise.all([getTransactions(), getCategories()])
+      .then(([transactions, categories]) => buildAssistantChart(trimmed, transactions, categories))
+      .catch(() => null);
+
     try {
       const token = await user.getIdToken();
       const apiBase = import.meta.env.VITE_FINANCE_API_URL || 'https://service.nrdonline.site';
@@ -74,6 +85,7 @@ export function AgentQueryDev() {
       }
 
       const reply = data as AgentResponse;
+      const chart = await chartPromise;
       setMessages(prev => [
         ...prev,
         {
@@ -82,16 +94,21 @@ export function AgentQueryDev() {
           text: reply.answer,
           toolsUsed: reply.toolsUsed,
           toolIterations: reply.toolIterations,
+          chart,
         },
       ]);
     } catch (err) {
+      const chart = await chartPromise;
       setMessages(prev => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: 'assistant',
-          text: err instanceof Error ? err.message : 'No se pudo consultar el asistente.',
-          error: true,
+          text: chart
+            ? (err instanceof Error ? `${err.message}\n\nIgual armé el gráfico con tus movimientos.` : 'Armé el gráfico con tus movimientos.')
+            : (err instanceof Error ? err.message : 'No se pudo consultar el asistente.'),
+          error: !chart,
+          chart,
         },
       ]);
     } finally {
@@ -132,7 +149,7 @@ export function AgentQueryDev() {
         {messages.length === 0 ? (
           <div className="flex h-full flex-col justify-end">
             <p className="mb-3 text-sm text-gray-400">Probá con una de estas preguntas:</p>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {SUGGESTIONS.map(suggestion => (
                 <button
                   key={suggestion}
@@ -150,7 +167,7 @@ export function AgentQueryDev() {
             {messages.map(item => (
               <div key={item.id} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  className={`${item.chart ? 'w-full' : 'max-w-[85%]'} rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     item.role === 'user'
                       ? 'bg-green-600 text-white'
                       : item.error
@@ -159,6 +176,7 @@ export function AgentQueryDev() {
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{item.text}</p>
+                  {item.chart && <AssistantChartView chart={item.chart} />}
                   {item.toolsUsed && item.toolsUsed.length > 0 && (
                     <p className="mt-2 text-xs text-gray-300">
                       Consultó: {item.toolsUsed.join(', ')}
