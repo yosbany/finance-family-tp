@@ -97,7 +97,7 @@ export const Sidebar = () => {
               💰 Finance Family
             </p>
             <p className="text-xs text-gray-500 text-center mt-1">
-              v1.0.0
+              v2.0.0
             </p>
           </div>
         </div>
