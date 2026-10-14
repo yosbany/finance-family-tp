@@ -14,6 +14,7 @@ import { CategoriesManagement } from './components/categories/CategoriesManageme
 import { MembersManagement } from './components/members/MembersManagement';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { AgentQueryDev } from './components/agent/AgentQueryDev';
+import { ChatInterface } from './components/chat/ChatInterface';
 import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
@@ -152,6 +153,8 @@ function App() {
         />
         <Route path="*" element={<Navigate to={user ? (isAuthorized ? '/' : '/unauthorized') : '/login'} replace />} />
       </Routes>
+      {/* Chat Interface - TIER 3 */}
+      {user && isAuthorized && <ChatInterface />}
     </BrowserRouter>
   );
 }
