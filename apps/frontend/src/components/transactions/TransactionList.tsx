@@ -27,6 +27,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { TransactionCategorizeModal } from './TransactionCategorizeModal';
+import { DuplicateDetector } from './DuplicateDetector';
 import { categorizeTransaction, KeywordMatchInfo } from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
@@ -966,6 +967,18 @@ export const TransactionList = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Detector de Duplicados */}
+      <div className="mb-4">
+        <DuplicateDetector
+          transactions={transactions}
+          onDuplicatesDetected={(count) => {
+            if (count > 0) {
+              console.log(`Encontrados ${count} grupos de duplicados`);
+            }
+          }}
+        />
       </div>
 
       {/* Transacciones pendientes */}
