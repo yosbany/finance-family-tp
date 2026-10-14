@@ -28,6 +28,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { TransactionCategorizeModal } from './TransactionCategorizeModal';
 import { DuplicateDetector } from './DuplicateDetector';
+import { FinancialAdvisor } from './FinancialAdvisor';
 import { categorizeTransaction, KeywordMatchInfo } from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
@@ -967,6 +968,11 @@ export const TransactionList = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Financial Advisor - TIER 1 + 2 */}
+      <div className="mb-4">
+        <FinancialAdvisor transactions={transactions} categories={categories} />
       </div>
 
       {/* Detector de Duplicados */}

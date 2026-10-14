@@ -35,6 +35,12 @@ import {
   FindSimilarTransactionsInput,
   FindSimilarTransactionsOutput,
 } from '../finance/tools/findSimilarTransactions.js';
+import {
+  getExpenseAnalysis,
+  getRecommendations,
+  getCashflowPrediction,
+  getLearningData,
+} from '../finance/tools/expenseAnalysisTools.js';
 
 export interface ToolDefinition {
   name: string;
@@ -74,6 +80,18 @@ const toolImplementations: Record<string, ToolExecutor> = {
   },
   findSimilarTransactions: async (context: AuthenticatedContext, args: unknown) => {
     return findSimilarTransactions(context, args);
+  },
+  getExpenseAnalysis: async (context: AuthenticatedContext, args: unknown) => {
+    return getExpenseAnalysis(context, args);
+  },
+  getRecommendations: async (context: AuthenticatedContext, args: unknown) => {
+    return getRecommendations(context, args);
+  },
+  getCashflowPrediction: async (context: AuthenticatedContext, args: unknown) => {
+    return getCashflowPrediction(context, args);
+  },
+  getLearningData: async (context: AuthenticatedContext, args: unknown) => {
+    return getLearningData(context, args);
   },
 };
 
@@ -208,6 +226,76 @@ export const toolSchemas: ToolDefinition[] = [
         limit: {
           type: 'number',
           description: 'Maximum number of results (1-20, default 10).',
+        },
+      },
+    },
+  },
+  {
+    name: 'getExpenseAnalysis',
+    description:
+      'Analyze spending patterns, detect anomalies, and get category statistics. Returns total spending, averages, and outliers by category.',
+    schema: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          description: 'Optional: analyze specific category. If omitted, analyzes all categories.',
+        },
+        timeframe: {
+          type: 'string',
+          enum: ['thisMonth', 'lastMonth', 'last3Months', 'lastYear'],
+          description: 'Time period to analyze. Default: all available data.',
+        },
+      },
+    },
+  },
+  {
+    name: 'getRecommendations',
+    description:
+      'Get smart recommendations for saving money or automating expenses based on spending patterns and trends.',
+    schema: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          description: 'Optional: get recommendations for specific category.',
+        },
+        type: {
+          type: 'string',
+          enum: ['savings', 'automation', 'all'],
+          description: 'Type of recommendations: savings-focused or automation suggestions.',
+        },
+      },
+    },
+  },
+  {
+    name: 'getCashflowPrediction',
+    description:
+      'Predict next months spending based on historical patterns. Returns predicted monthly totals with confidence intervals.',
+    schema: {
+      type: 'object',
+      properties: {
+        months: {
+          type: 'number',
+          description: 'Number of historical months to use for prediction. Default: 3.',
+        },
+      },
+    },
+  },
+  {
+    name: 'getLearningData',
+    description:
+      'Get training data from your categorized transactions. Helps understand how you categorize similar transactions for better future classification.',
+    schema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          description: 'Maximum transactions to retrieve. Default: 50.',
+        },
+        category: {
+          type: 'string',
+          description: 'Optional: get examples only for specific category.',
         },
       },
     },
