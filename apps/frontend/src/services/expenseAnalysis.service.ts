@@ -125,6 +125,7 @@ export function detectAnomalies(
   const groupedByCategory = new Map<string, Transaction[]>();
 
   expenses.forEach(tx => {
+    if (!tx.category) return;
     if (!groupedByCategory.has(tx.category)) {
       groupedByCategory.set(tx.category, []);
     }
@@ -184,6 +185,7 @@ export function detectSpendingPatterns(
     const txMonth = txDate.getMonth();
     const txYear = txDate.getFullYear();
 
+    if (!tx.category) return;
     if (!byCategory.has(tx.category)) {
       byCategory.set(tx.category, { current: [], last: [] });
     }

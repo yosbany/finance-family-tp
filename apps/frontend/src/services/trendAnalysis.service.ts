@@ -69,7 +69,9 @@ export function detectLifestyleChanges(
       return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
     })
     .forEach(tx => {
-      currentMonth.set(tx.category, (currentMonth.get(tx.category) || 0) + Math.abs(tx.amount));
+      if (tx.category) {
+        currentMonth.set(tx.category, (currentMonth.get(tx.category) || 0) + Math.abs(tx.amount));
+      }
     });
 
   const previousMonthAvg = new Map<string, number>();
@@ -81,7 +83,9 @@ export function detectLifestyleChanges(
       return date.getMonth() === lastMonth.getMonth() && date.getFullYear() === lastMonth.getFullYear();
     })
     .forEach(tx => {
-      previousMonthAvg.set(tx.category, (previousMonthAvg.get(tx.category) || 0) + Math.abs(tx.amount));
+      if (tx.category) {
+        previousMonthAvg.set(tx.category, (previousMonthAvg.get(tx.category) || 0) + Math.abs(tx.amount));
+      }
     });
 
   // Mudanza detection
@@ -177,7 +181,9 @@ export function calculateBehavioralProfile(transactions: Transaction[]): Behavio
   // Top categorías
   const byCategory = new Map<string, number>();
   expenses.forEach(tx => {
-    byCategory.set(tx.category, (byCategory.get(tx.category) || 0) + Math.abs(tx.amount));
+    if (tx.category) {
+      byCategory.set(tx.category, (byCategory.get(tx.category) || 0) + Math.abs(tx.amount));
+    }
   });
 
   const topCategories = Array.from(byCategory.entries())

@@ -48,31 +48,36 @@ export const DuplicateDetector = ({ transactions, onDuplicatesDetected }: Duplic
   const handleDeleteGroup = async (group: DuplicateGroup) => {
     const message = `¿Eliminar ${group.transactions.length - 1} transacción(es) duplicada(s)?\n\nSe mantiene: ${group.transactions[0]?.description}`;
 
-    showConfirm(message, async () => {
-      setDeleting(true);
-      try {
-        const idsToDelete = group.transactions.slice(1).map(tx => tx.id);
-        await deleteTransactionsByIds(idsToDelete);
+    showConfirm({
+      title: 'Eliminar duplicados',
+      message,
+      onConfirm: async () => {
+        setDeleting(true);
+        try {
+          const idsToDelete = group.transactions.slice(1).map(tx => tx.id);
+          await deleteTransactionsByIds(idsToDelete);
 
-        const updated = duplicates.filter(d => d.id !== group.id);
-        setDuplicates(updated);
+          const updated = duplicates.filter(d => d.id !== group.id);
+          setDuplicates(updated);
 
-        showSuccess(`✅ Eliminadas ${idsToDelete.length} transacciones`);
-      } catch (error) {
-        console.error('Error eliminando duplicados:', error);
-        showError('Error al eliminar transacciones');
-      } finally {
-        setDeleting(false);
-      }
+          showSuccess(`✅ Eliminadas ${idsToDelete.length} transacciones`);
+        } catch (error) {
+          console.error('Error eliminando duplicados:', error);
+          showError('Error al eliminar transacciones');
+        } finally {
+          setDeleting(false);
+        }
+      },
     });
   };
 
   const handleDeleteAll = async () => {
     const totalToDelete = duplicates.reduce((sum, g) => sum + (g.transactions.length - 1), 0);
 
-    showConfirm(
-      `¿Eliminar ${totalToDelete} transacciones duplicadas?\n\nEsto mantendrá la primera de cada grupo.`,
-      async () => {
+    showConfirm({
+      title: 'Eliminar todos los duplicados',
+      message: `¿Eliminar ${totalToDelete} transacciones duplicadas?\n\nEsto mantendrá la primera de cada grupo.`,
+      onConfirm: async () => {
         setDeleting(true);
         try {
           for (const group of duplicates) {
@@ -88,8 +93,8 @@ export const DuplicateDetector = ({ transactions, onDuplicatesDetected }: Duplic
         } finally {
           setDeleting(false);
         }
-      }
-    );
+      },
+    });
   };
 
   if (duplicates.length === 0 && !showReport) {

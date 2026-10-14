@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
+import { getCurrentUser } from '../../services/auth.service';
 
 interface ChatMessage {
   id: string;
@@ -11,7 +12,7 @@ interface ChatMessage {
 }
 
 export const ChatInterface = () => {
-  const { user, getIdToken } = useAuth();
+  const { user } = useAuth();
   const { showError, ModalComponent } = useModal();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -42,7 +43,8 @@ export const ChatInterface = () => {
     setLoading(true);
 
     try {
-      const token = await getIdToken();
+      const firebaseUser = getCurrentUser();
+      const token = firebaseUser ? await firebaseUser.getIdToken() : '';
       const apiUrl = process.env.REACT_APP_FINANCE_API_URL || 'http://localhost:3001';
 
       const response = await fetch(`${apiUrl}/api/agent/query`, {

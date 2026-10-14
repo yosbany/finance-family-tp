@@ -469,12 +469,6 @@ export const TransactionList = () => {
               await updateTransaction(transaction.id, {
                 category: agentResult.categoryId,
                 status: agentResult.confidence >= 0.75 ? 'classified' : 'pending',
-                suggestedCategory: {
-                  categoryId: agentResult.categoryId,
-                  confidence: agentResult.confidence,
-                  source: 'llm_agent',
-                  timestamp: Date.now(),
-                }
               });
               agentCategorizedCount++;
             }
@@ -515,12 +509,13 @@ export const TransactionList = () => {
   ): Promise<{ categoryId: string; confidence: number } | null> => {
     try {
       const apiUrl = process.env.REACT_APP_FINANCE_API_URL || 'http://localhost:3001';
+      const token = user ? await user.getIdToken() : '';
 
       const response = await fetch(`${apiUrl}/api/agent/suggest-category`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user?.token || ''}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           transactionId: transaction.id,
