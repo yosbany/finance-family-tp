@@ -14,6 +14,7 @@ import { CategoriesManagement } from './components/categories/CategoriesManageme
 import { MembersManagement } from './components/members/MembersManagement';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { AgentQueryDev } from './components/agent/AgentQueryDev';
+import { DuplicatesPage } from './components/transactions/DuplicatesPage';
 import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
@@ -83,6 +84,26 @@ function App() {
           }
         />
         <Route
+          path="/transactions/duplicates"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DuplicatesPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/assistant"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AgentQueryDev />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/categories"
           element={
             <ProtectedRoute>
@@ -142,14 +163,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/dev/agent"
-          element={
-            <ProtectedRoute>
-              <AgentQueryDev />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/dev/agent" element={<Navigate to="/assistant" replace />} />
         <Route path="*" element={<Navigate to={user ? (isAuthorized ? '/' : '/unauthorized') : '/login'} replace />} />
       </Routes>
     </BrowserRouter>

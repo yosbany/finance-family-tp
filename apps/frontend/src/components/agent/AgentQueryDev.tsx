@@ -41,7 +41,8 @@ export function AgentQueryDev() {
       // Get the Firebase ID token
       const token = await user.getIdToken();
 
-      const res = await fetch('/api/agent/query', {
+      const apiBase = import.meta.env.VITE_FINANCE_API_URL || 'https://service.nrdonline.site';
+      const res = await fetch(`${apiBase}/api/agent/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,15 +77,14 @@ export function AgentQueryDev() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
+    <div className="p-2">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-            Financial Agent - Development Test
+            Asistente financiero
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Query your financial data using natural language
+            Pregunta por tus movimientos en lenguaje natural
           </p>
         </div>
 
@@ -98,7 +98,7 @@ export function AgentQueryDev() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me about your transactions... (Ctrl+Enter to send)"
+              placeholder="Pregunta por tus movimientos..."
               className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
               rows={4}
               disabled={loading}
@@ -116,7 +116,7 @@ export function AgentQueryDev() {
                 Processing...
               </>
             ) : (
-              'Send Query'
+              'Enviar'
             )}
           </button>
         </div>

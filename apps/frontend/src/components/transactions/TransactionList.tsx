@@ -530,6 +530,19 @@ export const TransactionList = () => {
           >
             {getCategoryName(transaction.category || '')}
           </span>
+          {!transaction.category && (() => {
+            const suggestion = categorizeTransaction(transaction.description, categories);
+            if (!suggestion || suggestion.confidence < 0.5) return null;
+            const percent = Math.round(suggestion.confidence * 100);
+            return (
+              <span
+                className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-900/40 text-emerald-300 border border-emerald-700"
+                title="Sugerencia del motor de reglas"
+              >
+                IA {getCategoryName(suggestion.categoryId)} {percent}%
+              </span>
+            );
+          })()}
         </td>
         <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
           transaction.type === 'income'
