@@ -30,6 +30,11 @@ import {
   SuggestTransactionCategoryInput,
   SuggestTransactionCategoryOutput,
 } from '../finance/tools/suggestTransactionCategory.js';
+import {
+  findSimilarTransactions,
+  FindSimilarTransactionsInput,
+  FindSimilarTransactionsOutput,
+} from '../finance/tools/findSimilarTransactions.js';
 
 export interface ToolDefinition {
   name: string;
@@ -66,6 +71,9 @@ const toolImplementations: Record<string, ToolExecutor> = {
   },
   suggestTransactionCategory: async (context: AuthenticatedContext, args: unknown) => {
     return suggestTransactionCategory(context, args);
+  },
+  findSimilarTransactions: async (context: AuthenticatedContext, args: unknown) => {
+    return findSimilarTransactions(context, args);
   },
 };
 
@@ -180,6 +188,28 @@ export const toolSchemas: ToolDefinition[] = [
         },
       },
       required: ['transactionId'],
+    },
+  },
+  {
+    name: 'findSimilarTransactions',
+    description:
+      'Find similar categorized transactions in your history to inform classification decisions. Provides category distribution from past similar transactions. READ-ONLY, searches only categorized transactions. Useful for investigating how similar transactions have been categorized historically.',
+    schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (merchant name, description keywords). Optional but required if transactionId not provided.',
+        },
+        transactionId: {
+          type: 'string',
+          description: 'ID of current pending transaction to find similar ones for. Optional but required if query not provided.',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (1-20, default 10).',
+        },
+      },
     },
   },
 ];
