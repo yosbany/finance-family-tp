@@ -97,7 +97,7 @@ function App() {
           path="/assistant"
           element={
             <ProtectedRoute>
-              <Layout>
+              <Layout wide>
                 <AgentQueryDev />
               </Layout>
             </ProtectedRoute>

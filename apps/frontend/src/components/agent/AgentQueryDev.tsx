@@ -1,11 +1,4 @@
-/**
- * Agent Query Development Component
- * 
- * Minimal UI for testing the financial agent.
- * This is a development/testing interface for FASE 05.
- */
-
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
 interface AgentResponse {
@@ -15,184 +8,202 @@ interface AgentResponse {
   requestId: string;
 }
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  toolsUsed?: string[];
+  toolIterations?: number;
+  error?: boolean;
+}
+
+const SUGGESTIONS = [
+  '¿Cuánto gasté el mes pasado?',
+  'Mostrame los movimientos de septiembre 2026',
+  '¿Tuve algún gasto mayor a $10.000?',
+  'Buscá movimientos de supermercado',
+  '¿Qué puedo consultar de mis finanzas?',
+];
+
 export function AgentQueryDev() {
   const { user } = useAuth();
   const [message, setMessage] = useState('');
-  const [response, setResponse] = useState<AgentResponse | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleQuery = async () => {
-    if (!message.trim()) {
-      setError('Please enter a message');
-      return;
-    }
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!thread) return;
+    thread.scrollTop = thread.scrollHeight;
+  }, [messages, loading]);
+
+  const send = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
 
     if (!user) {
-      setError('Not authenticated');
+      setMessages(prev => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'user', text: trimmed },
+        { id: crypto.randomUUID(), role: 'assistant', text: 'Tenés que iniciar sesión para consultar.', error: true },
+      ]);
       return;
     }
 
+    setMessage('');
+    setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', text: trimmed }]);
     setLoading(true);
-    setError(null);
-    setResponse(null);
 
     try {
-      // Get the Firebase ID token
       const token = await user.getIdToken();
-
       const apiBase = import.meta.env.VITE_FINANCE_API_URL || 'https://service.nrdonline.site';
       const res = await fetch(`${apiBase}/api/agent/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          message: message.trim(),
-        }),
+        body: JSON.stringify({ message: trimmed }),
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        setError(data.message || `Error: ${res.status}`);
-        return;
+        throw new Error(data.message || `Error ${res.status}`);
       }
 
-      setResponse(data);
-      setMessage('');
+      const reply = data as AgentResponse;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: reply.answer,
+          toolsUsed: reply.toolsUsed,
+          toolIterations: reply.toolIterations,
+        },
+      ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setMessages(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: err instanceof Error ? err.message : 'No se pudo consultar el asistente.',
+          error: true,
+        },
+      ]);
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleQuery();
+      send(message);
     }
   };
 
   return (
-    <div className="p-2">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-            Asistente financiero
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Pregunta por tus movimientos en lenguaje natural
-          </p>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Asistente financiero</h1>
+          <p className="text-sm text-gray-400">Preguntá por tus movimientos. Enter envía, Shift+Enter hace un salto de línea.</p>
         </div>
-
-        {/* Query Input */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 mb-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Your Question
-            </label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Pregunta por tus movimientos..."
-              className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
-              rows={4}
-              disabled={loading}
-            />
-          </div>
-
+        {messages.length > 0 && (
           <button
-            onClick={handleQuery}
-            disabled={loading || !message.trim()}
-            className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center gap-2"
+            type="button"
+            onClick={() => setMessages([])}
+            className="shrink-0 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
           >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                Processing...
-              </>
-            ) : (
-              'Enviar'
-            )}
+            Limpiar
           </button>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <h3 className="text-sm font-semibold text-red-800 dark:text-red-300 mb-1">Error</h3>
-            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-          </div>
         )}
+      </div>
 
-        {/* Response Display */}
-        {response && (
-          <div className="space-y-6">
-            {/* Answer */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">
-                Answer
-              </h2>
-              <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                {response.answer}
-              </p>
+      <div
+        ref={threadRef}
+        className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-gray-700 bg-gray-800/40 p-4 md:p-6"
+      >
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col justify-end">
+            <p className="mb-3 text-sm text-gray-400">Probá con una de estas preguntas:</p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {SUGGESTIONS.map(suggestion => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => send(suggestion)}
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-left text-sm text-gray-200 hover:border-green-600 hover:bg-gray-700"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
-
-            {/* Tools Used */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">
-                Details
-              </h3>
-              <div className="space-y-3 text-sm">
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Tools Used:
-                  </span>
-                  <span className="text-slate-600 dark:text-slate-400 ml-2">
-                    {response.toolsUsed.length > 0
-                      ? response.toolsUsed.join(', ')
-                      : 'None (no tools required)'}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Iterations:
-                  </span>
-                  <span className="text-slate-600 dark:text-slate-400 ml-2">
-                    {response.toolIterations}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">
-                    Request ID:
-                  </span>
-                  <code className="text-xs text-slate-600 dark:text-slate-400 ml-2 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded font-mono">
-                    {response.requestId}
-                  </code>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.map(item => (
+              <div key={item.id} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                    item.role === 'user'
+                      ? 'bg-green-600 text-white'
+                      : item.error
+                        ? 'border border-red-800 bg-red-950/60 text-red-200'
+                        : 'bg-gray-700 text-gray-100'
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap">{item.text}</p>
+                  {item.toolsUsed && item.toolsUsed.length > 0 && (
+                    <p className="mt-2 text-xs text-gray-300">
+                      Consultó: {item.toolsUsed.join(', ')}
+                      {typeof item.toolIterations === 'number' ? ` · ${item.toolIterations} pasos` : ''}
+                    </p>
+                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Example Queries */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-              <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">
-                Example Queries
-              </h3>
-              <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
-                <li>• What type of information can you consult from my finances?</li>
-                <li>• Show me my transactions from September 2026</li>
-                <li>• Did I have any transaction over $10,000 in September?</li>
-                <li>• Search for movements related to supermarket</li>
-                <li>• What transactions do I have from last week?</li>
-              </ul>
-            </div>
+            ))}
+            {loading && (
+              <div className="flex justify-start">
+                <div className="rounded-2xl bg-gray-700 px-4 py-3 text-sm text-gray-300">
+                  Consultando tus datos...
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      <form
+        className="mt-4 flex items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(message);
+        }}
+      >
+        <textarea
+          ref={inputRef}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Escribí tu pregunta..."
+          rows={2}
+          disabled={loading}
+          className="min-h-[3.5rem] flex-1 resize-none rounded-xl border border-gray-600 bg-gray-800 px-4 py-3 text-white placeholder-gray-500 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:opacity-60"
+        />
+        <button
+          type="submit"
+          disabled={loading || !message.trim()}
+          className="h-14 shrink-0 rounded-xl bg-green-600 px-6 font-medium text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-gray-600"
+        >
+          {loading ? '...' : 'Enviar'}
+        </button>
+      </form>
     </div>
   );
 }
