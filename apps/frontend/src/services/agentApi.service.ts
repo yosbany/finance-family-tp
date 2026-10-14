@@ -140,4 +140,43 @@ export async function checkAgentApiHealth(): Promise<boolean> {
   }
 }
 
+/**
+ * Llama a una herramienta del agente backend.
+ * Interface genérica para compatibilidad con servicios legacy.
+ */
+export async function callTool(toolName: string, params: Record<string, unknown>): Promise<any> {
+  try {
+    const idToken = await getIdToken();
+    
+    const response = await fetch(
+      `${AGENT_API_BASE_URL}/api/tools/${toolName}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(params)
+      }
+    );
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { error: errorData.message || `HTTP ${response.status}` };
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error(`Error calling tool ${toolName}:`, error);
+    return { error: String(error) };
+  }
+}
+
+// Re-export as object for compatibility
+export const agentApi = {
+  callSearchTransactions,
+  checkAgentApiHealth,
+  callTool
+};
+
 // Made with Bob
