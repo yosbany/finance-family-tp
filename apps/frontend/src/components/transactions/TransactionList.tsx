@@ -441,38 +441,107 @@ export const TransactionList = () => {
 
   const handleRecategorizeAll = async () => {
     if (sortedPending.length === 0 || !user) return;
-    
+
     setRecategorizing(true);
     let categorizedCount = 0;
+    let agentCategorizedCount = 0;
 
     try {
       // Re-categorizar cada transacción pendiente
       for (const transaction of sortedPending) {
-        const result = categorizeTransaction(transaction.description, categories);
-        
-        if (result && result.categoryId) {
+        // PASO 1: Intentar con REGLAS
+        let result = categorizeTransaction(transaction.description, categories);
+
+        if (result && result.categoryId && result.confidence >= 0.5) {
+          // Las reglas resolvieron
           await updateTransaction(transaction.id, {
             category: result.categoryId,
             status: 'classified'
           });
           categorizedCount++;
+        } else {
+          // PASO 2: Si reglas fallan, intentar con LLM Agent
+          try {
+            const agentResult = await suggestCategoryWithAgent(transaction, categories);
+            if (agentResult && agentResult.categoryId && agentResult.confidence > 0.6) {
+              await updateTransaction(transaction.id, {
+                category: agentResult.categoryId,
+                status: agentResult.confidence >= 0.75 ? 'classified' : 'pending',
+                suggestedCategory: {
+                  categoryId: agentResult.categoryId,
+                  confidence: agentResult.confidence,
+                  source: 'llm_agent',
+                  timestamp: Date.now(),
+                }
+              });
+              agentCategorizedCount++;
+            }
+          } catch (agentErr) {
+            // Si falla el agent, dejar como pending
+            console.warn(`Agent fallió para ${transaction.id}:`, agentErr);
+          }
         }
       }
 
       // Recargar transacciones
       const updatedTransactions = await getTransactions();
       setTransactions(updatedTransactions);
-      
-      if (categorizedCount > 0) {
-        showSuccess(`Se categorizaron automáticamente ${categorizedCount} de ${sortedPending.length} transacciones`);
+
+      const totalCategorized = categorizedCount + agentCategorizedCount;
+      if (totalCategorized > 0) {
+        showSuccess(
+          `Se categorizaron ${totalCategorized} de ${sortedPending.length} transacciones ` +
+          `(${categorizedCount} por reglas, ${agentCategorizedCount} por LLM Agent)`
+        );
       } else {
-        showInfo('No se encontraron coincidencias con las reglas actuales. Considera agregar más palabras clave a las categorías.');
+        showInfo('No se encontraron coincidencias. Considera agregar más palabras clave o verificar la conexión con el LLM Agent.');
       }
     } catch (err) {
       console.error('Error al re-categorizar:', err);
       setError('Error al re-categorizar las transacciones');
     } finally {
       setRecategorizing(false);
+    }
+  };
+
+  /**
+   * Sugiere categoría usando LLM Agent como fallback
+   */
+  const suggestCategoryWithAgent = async (
+    transaction: Transaction,
+    categories: Category[]
+  ): Promise<{ categoryId: string; confidence: number } | null> => {
+    try {
+      const apiUrl = process.env.REACT_APP_FINANCE_API_URL || 'http://localhost:3001';
+
+      const response = await fetch(`${apiUrl}/api/agent/suggest-category`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user?.token || ''}`,
+        },
+        body: JSON.stringify({
+          transactionId: transaction.id,
+          description: transaction.description,
+          amount: transaction.amount,
+          type: transaction.type,
+          categories: categories.map(c => ({
+            id: c.id,
+            name: c.name,
+            keywords: c.keywords,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result.suggestion || null;
+    } catch (error) {
+      console.warn('LLM Agent suggestion failed:', error);
+      return null;
     }
   };
 

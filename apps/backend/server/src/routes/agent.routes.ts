@@ -193,6 +193,152 @@ export async function registerAgentRoutes(fastify: FastifyInstance): Promise<voi
       }
     }
   );
+
+  /**
+   * POST /api/agent/suggest-category
+   *
+   * NUEVO ENDPOINT: Sugiere categoría para una transacción
+   * Usa el LLM Agent como fallback cuando las reglas no resuelven
+   *
+   * Request:
+   *   Authorization: Bearer <Firebase ID Token>
+   *   Content-Type: application/json
+   *   Body: {
+   *     transactionId: string,
+   *     description: string,
+   *     amount: number,
+   *     type: 'income' | 'expense',
+   *     categories: Array<{ id, name, keywords }>
+   *   }
+   *
+   * Response (200):
+   *   {
+   *     suggestion: {
+   *       categoryId: string,
+   *       confidence: number (0-1),
+   *       source: 'llm_agent' | 'rules',
+   *       reasoning: string
+   *     }
+   *   }
+   */
+  fastify.post<{ Body: Record<string, unknown> }>(
+    '/api/agent/suggest-category',
+    { preHandler: requireAuthMiddleware },
+    async (request: FastifyRequest & { auth?: AuthenticatedContext }, reply: FastifyReply) => {
+      const requestId = randomUUID();
+      const startTime = Date.now();
+
+      try {
+        const auth = (request as any).auth as AuthenticatedContext;
+        if (!auth) {
+          return reply.code(401).send({
+            error: 'UNAUTHENTICATED',
+            message: 'Authentication required',
+          });
+        }
+
+        // Validate input
+        if (!request.body || typeof request.body !== 'object') {
+          return reply.code(400).send({
+            error: 'INVALID_ARGUMENT',
+            message: 'Request body must be an object',
+          });
+        }
+
+        const body = request.body as any;
+        const { description, categories } = body;
+
+        if (!description || typeof description !== 'string') {
+          return reply.code(400).send({
+            error: 'INVALID_ARGUMENT',
+            message: 'Transaction description is required',
+          });
+        }
+
+        if (!categories || !Array.isArray(categories)) {
+          return reply.code(400).send({
+            error: 'INVALID_ARGUMENT',
+            message: 'Categories array is required',
+          });
+        }
+
+        // Construir prompt para el agente
+        const categoryDescriptions = categories
+          .map((c: any) => `- ${c.name} (keywords: ${c.keywords?.join(', ') || 'none'})`)
+          .join('\n');
+
+        const prompt = `You are a financial transaction classifier. Given a transaction description, suggest the most appropriate category.
+
+Transaction: "${description}"
+
+Available categories:
+${categoryDescriptions}
+
+Respond in JSON format:
+{
+  "categoryId": "string (ID of the most likely category)",
+  "confidence": number (0-1),
+  "reasoning": "brief explanation"
+}`;
+
+        // Usar el agente para sugerir
+        const input: AgentQueryInput = {
+          userId: auth.uid,
+          message: prompt,
+          context: {
+            taskType: 'transaction_classification',
+            transactionDescription: description,
+          },
+        };
+
+        const orchestrator = new AgentOrchestrator();
+        const result = await orchestrator.execute(input, auth);
+
+        // Parsear respuesta del agente
+        let suggestion = null;
+        try {
+          // Extraer JSON de la respuesta
+          const jsonMatch = result.answer.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            suggestion = JSON.parse(jsonMatch[0]);
+          }
+        } catch (parseErr) {
+          console.warn('[AGENT] Failed to parse category suggestion:', parseErr);
+        }
+
+        if (!suggestion) {
+          return reply.code(200).send({
+            suggestion: null,
+            message: 'Could not generate suggestion',
+          });
+        }
+
+        const duration = Date.now() - startTime;
+        console.log(
+          `[AGENT] ${requestId} category suggestion (${duration}ms): ` +
+          `${suggestion.categoryId} (confidence: ${suggestion.confidence})`
+        );
+
+        return reply.code(200).send({
+          suggestion: {
+            categoryId: suggestion.categoryId,
+            confidence: suggestion.confidence,
+            reasoning: suggestion.reasoning,
+            source: 'llm_agent',
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const duration = Date.now() - startTime;
+
+        console.error(`[AGENT] ${requestId} suggest-category error (${duration}ms): ${message}`);
+        return reply.code(500).send({
+          error: 'INTERNAL_ERROR',
+          message: 'Failed to suggest category',
+        });
+      }
+    }
+  );
 }
 
 export default registerAgentRoutes;
