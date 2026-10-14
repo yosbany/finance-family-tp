@@ -24,60 +24,19 @@ export interface DuplicateAnalysis {
   estimatedSavings: number;
 }
 
-/**
- * Calcula similitud de Levenshtein entre dos strings
- * Retorna valor 0-1 (1 = idéntico, 0 = completamente diferente)
- */
-function calculateStringSimilarity(str1: string, str2: string): number {
-  const s1 = str1.toLowerCase().trim();
-  const s2 = str2.toLowerCase().trim();
-
-  if (s1 === s2) return 1;
-  if (s1.length === 0 || s2.length === 0) return 0;
-
-  const len1 = s1.length;
-  const len2 = s2.length;
-  const matrix: number[][] = [];
-
-  for (let i = 0; i <= len1; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= len2; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1,
-        matrix[i][j - 1] + 1,
-        matrix[i - 1][j - 1] + cost
-      );
-    }
-  }
-
-  const maxLen = Math.max(len1, len2);
-  const distance = matrix[len1][len2];
-  return 1 - distance / maxLen;
+function calendarDay(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
-/**
- * Extrae palabras clave de descripción
- * Elimina stopwords y normaliza
- */
-function extractKeywords(description: string): string[] {
-  const stopwords = [
-    'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
-    'de', 'del', 'y', 'e', 'o', 'u', 'por', 'para', 'en', 'con'
-  ];
+function normalizeDescription(description: string): string {
+  return description.toLowerCase().replace(/\s+/g, ' ').trim();
+}
 
-  return description
-    .toLowerCase()
-    .replace(/[^a-záéíóú\s]/g, '')
-    .split(/\s+/)
-    .filter(word => word.length > 2 && !stopwords.includes(word));
+/** Cuotas de tarjeta: cada cuota es un cargo distinto, aunque el comercio y el monto coincidan. */
+function isCreditInstallment(description: string): boolean {
+  const text = description.toLowerCase();
+  return /\bcuotas?\b/.test(text) || /\bcta\.?\s*\d+\s*\/\s*\d+/.test(text);
 }
 
 /**
@@ -108,36 +67,21 @@ export function detectDuplicates(transactions: Transaction[]): DuplicateAnalysis
       // Filtro 3: Misma moneda
       if (tx.currency !== otherTx.currency) continue;
 
-      // Filtro 4: Monto similar (dentro del 1%)
+      if (isCreditInstallment(tx.description) || isCreditInstallment(otherTx.description)) continue;
+
       const amountDiff = Math.abs(tx.amount - otherTx.amount);
-      const amountThreshold = Math.max(Math.abs(tx.amount), Math.abs(otherTx.amount)) * 0.01;
-      if (amountDiff > amountThreshold) continue;
+      if (amountDiff > 0.009) continue;
 
-      // Filtro 5: Dentro de 24 horas
-      const timeDiff = Math.abs(tx.date - otherTx.date);
-      const oneDay = 24 * 60 * 60 * 1000;
-      if (timeDiff > oneDay) continue;
+      if (calendarDay(tx.date) !== calendarDay(otherTx.date)) continue;
 
-      // Ahora calculamos similitud de descripción
-      const descSimilarity = calculateStringSimilarity(tx.description, otherTx.description);
+      const sameDescription = normalizeDescription(tx.description) === normalizeDescription(otherTx.description);
+      if (!sameDescription) continue;
 
-      // Heurística: si descripción es >80% similar, es probablemente un duplicado
-      if (descSimilarity > 0.8) {
-        candidates.push({
-          tx: otherTx,
-          similarity: descSimilarity,
-          reason: `Descripción ${Math.round(descSimilarity * 100)}% similar`
-        });
-      }
-
-      // Heurística 2: descripción exacta + monto exacto = duplicado seguro
-      if (tx.description === otherTx.description && amountDiff < 0.01) {
-        candidates.push({
-          tx: otherTx,
-          similarity: 1.0,
-          reason: 'Descripción y monto idénticos'
-        });
-      }
+      candidates.push({
+        tx: otherTx,
+        similarity: 1,
+        reason: 'Mismo día, misma cuenta, mismo monto y misma descripción'
+      });
     }
 
     // Si encontramos candidatos, crear grupo

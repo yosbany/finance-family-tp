@@ -13,7 +13,6 @@ const navItems: NavItem[] = [
   { path: '/transactions', label: 'Transacciones', icon: '💸' },
   { path: '/transactions/upload', label: 'Cargar Extractos', icon: '📤' },
   { path: '/assistant', label: 'Asistente', icon: '✨' },
-  { path: '/transactions/duplicates', label: 'Duplicados', icon: '🧬' },
   { path: '/categories', label: 'Categorías', icon: '🏷️' },
   { path: '/assets', label: 'Patrimonio', icon: '💎' },
   { path: '/goals', label: 'Objetivos', icon: '🎯' },

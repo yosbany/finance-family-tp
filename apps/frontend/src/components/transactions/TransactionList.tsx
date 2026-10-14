@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import {
   getTransactions,
   updateTransaction,
+  deleteTransaction,
   deleteTransactionsByFilter,
   deleteTransactionsByIds,
   deleteAllTransactions,
@@ -27,6 +28,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useAuth } from '../../hooks/useAuth';
 import { useModal } from '../../hooks/useModal';
 import { TransactionCategorizeModal } from './TransactionCategorizeModal';
+import { DuplicateDetector } from './DuplicateDetector';
 import { categorizeTransaction, KeywordMatchInfo } from '../../utils/categorization';
 import { getOwnerBadgeClasses } from '../../utils/ownerColors';
 
@@ -60,7 +62,11 @@ export const TransactionList = () => {
   const [deleteMonth, setDeleteMonth] = useState(now.getMonth() + 1);
   const [deleteYear, setDeleteYear] = useState(now.getFullYear());
   const [showCleanupPanel, setShowCleanupPanel] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [pendingPage, setPendingPage] = useState(1);
+  const [categorizedPage, setCategorizedPage] = useState(1);
+  const pageSize = 25;
 
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -439,6 +445,24 @@ export const TransactionList = () => {
     new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
+  useEffect(() => {
+    setPendingPage(1);
+    setCategorizedPage(1);
+  }, [searchTerm, filterAccount, filterCategory, filterType, filterStatus, dateFrom, dateTo, uploadIdFilter]);
+
+  const pendingPageCount = Math.max(1, Math.ceil(sortedPending.length / pageSize));
+  const categorizedPageCount = Math.max(1, Math.ceil(sortedCategorized.length / pageSize));
+  const safePendingPage = Math.min(pendingPage, pendingPageCount);
+  const safeCategorizedPage = Math.min(categorizedPage, categorizedPageCount);
+  const pendingSlice = sortedPending.slice((safePendingPage - 1) * pageSize, safePendingPage * pageSize);
+  const categorizedSlice = sortedCategorized.slice((safeCategorizedPage - 1) * pageSize, safeCategorizedPage * pageSize);
+
+  const handleMergeDuplicates = async (_primary: Transaction, duplicates: Transaction[]) => {
+    await Promise.all(duplicates.map(tx => deleteTransaction(tx.id)));
+    const removed = new Set(duplicates.map(tx => tx.id));
+    setTransactions(prev => prev.filter(tx => !removed.has(tx.id)));
+  };
+
   const handleRecategorizeAll = async () => {
     if (sortedPending.length === 0 || !user) return;
     
@@ -609,6 +633,13 @@ export const TransactionList = () => {
           </div>
           <button
             type="button"
+            onClick={() => setShowDuplicates(prev => !prev)}
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+          >
+            {showDuplicates ? 'Ocultar duplicados' : 'Revisar duplicados'}
+          </button>
+          <button
+            type="button"
             onClick={() => setShowCleanupPanel(prev => !prev)}
             className="px-3 py-1.5 text-xs rounded-md border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
           >
@@ -616,6 +647,18 @@ export const TransactionList = () => {
           </button>
         </div>
       </div>
+
+      {showDuplicates && (
+        <div className="card border border-gray-200 dark:border-gray-700">
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+            Posibles duplicados
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Solo el mismo día, la misma cuenta, el mismo monto y la misma descripción. Una compra otro día, o una cuota de tarjeta, no entra acá.
+          </p>
+          <DuplicateDetector transactions={transactions} onMerge={handleMergeDuplicates} />
+        </div>
+      )}
 
       {showCleanupPanel && (
         <div className="card border border-gray-200 dark:border-gray-700 space-y-4">
@@ -953,7 +996,7 @@ export const TransactionList = () => {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {renderSelectAllHeader(sortedPending)}
+                  {renderSelectAllHeader(pendingSlice)}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Fecha
                   </th>
@@ -972,10 +1015,17 @@ export const TransactionList = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedPending.map(renderTransactionRow)}
+                {pendingSlice.map(renderTransactionRow)}
               </tbody>
             </table>
           </div>
+          <ListPagination
+            page={safePendingPage}
+            pageCount={pendingPageCount}
+            total={sortedPending.length}
+            pageSize={pageSize}
+            onPage={setPendingPage}
+          />
         </div>
       )}
 
@@ -997,7 +1047,7 @@ export const TransactionList = () => {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700">
                 <tr>
-                  {renderSelectAllHeader(sortedCategorized)}
+                  {renderSelectAllHeader(categorizedSlice)}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Fecha
                   </th>
@@ -1016,10 +1066,17 @@ export const TransactionList = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedCategorized.map(renderTransactionRow)}
+                {categorizedSlice.map(renderTransactionRow)}
               </tbody>
             </table>
           </div>
+          <ListPagination
+            page={safeCategorizedPage}
+            pageCount={categorizedPageCount}
+            total={sortedCategorized.length}
+            pageSize={pageSize}
+            onPage={setCategorizedPage}
+          />
         </div>
       )}
 
@@ -1062,4 +1119,49 @@ export const TransactionList = () => {
   );
 };
 
-// Made with Bob
+function ListPagination({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+}) {
+  if (total <= pageSize) return null;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        {from}–{to} de {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPage(page - 1)}
+          disabled={page <= 1}
+          className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40"
+        >
+          Anterior
+        </button>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {page} / {pageCount}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPage(page + 1)}
+          disabled={page >= pageCount}
+          className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-40"
+        >
+          Siguiente
+        </button>
+      </div>
+    </div>
+  );
+}

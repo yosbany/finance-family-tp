@@ -14,7 +14,6 @@ import { CategoriesManagement } from './components/categories/CategoriesManageme
 import { MembersManagement } from './components/members/MembersManagement';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { AgentQueryDev } from './components/agent/AgentQueryDev';
-import { DuplicatesPage } from './components/transactions/DuplicatesPage';
 import { useAuthorization } from './hooks/useAuthorization';
 
 function App() {
@@ -79,16 +78,6 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <UploadStatements />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/transactions/duplicates"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <DuplicatesPage />
               </Layout>
             </ProtectedRoute>
           }
